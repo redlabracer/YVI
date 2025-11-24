@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Customer {
+  id        Int       @id @default(autoincrement())
+  firstName String
+  lastName  String
+  address   String?
+  phone     String?
+  email     String?
+  vehicles  Vehicle[]
+  documents Document[]
+  history   ServiceRecord[]
+  lexwareId String?   @unique // ID from Lexware Office
+  createdAt DateTime  @default(now())
+}
+
+model Vehicle {
+  id             Int      @id @default(autoincrement())
+  vin            String   @unique
+  licensePlate   String
+  make           String
+  model          String
+  registrationDoc String? // Path to file
+  customerId     Int
+  customer       Customer @relation(fields: [customerId], references: [id])
+  createdAt      DateTime @default(now())
+}
+
+model Document {
+  id         Int      @id @default(autoincrement())
+  name       String
+  path       String
+  type       String   @default("manual") // manual, invoice, registration
+  lexwareId  String?  @unique
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model ServiceRecord {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @default(now())
+  description String
+  cost        Float?
+  lexwareId   String?  @unique
+  customerId  Int
+  customer    Customer @relation(fields: [customerId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model Settings {
+  id        Int     @id @default(autoincrement())
+  apiKey    String?
+  syncEnabled Boolean @default(false)
+}

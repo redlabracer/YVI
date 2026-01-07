@@ -1,11 +1,8 @@
-import { app } from 'electron'
-import { exec } from 'child_process'
-import { join } from 'path'
 
 export function runMigrations() {
-  return new Promise((resolve, reject) => {
-    const schemaPath = join(app.getAppPath(), 'prisma/schema.prisma').replace('app.asar', 'app.asar.unpacked')
-    const dbPath = join(app.getPath('userData'), 'database.db')
+  return new Promise((resolve) => {
+    // const schemaPath = join(app.getAppPath(), 'prisma/schema.prisma').replace('app.asar', 'app.asar.unpacked')
+    // const dbPath = join(app.getPath('userData'), 'database.db')
     
     // In production, we use a different approach or bundled migration script.
     // For this specific request "make it work like in production without VS Code",

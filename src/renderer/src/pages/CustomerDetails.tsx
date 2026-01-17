@@ -6,6 +6,7 @@ import {
   Car, FileText, History, Plus, Upload, Calendar, DollarSign,
   File, ExternalLink, Package, Wand2, Loader2, Smartphone
 } from 'lucide-react'
+import { api } from '../api'
 
 export default function CustomerDetails() {
   const { id } = useParams()
@@ -20,6 +21,10 @@ export default function CustomerDetails() {
   const [tunnelPassword, setTunnelPassword] = useState('')
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
   const [activeUploadContext, setActiveUploadContext] = useState<'vehicle' | 'history' | null>(null)
+  
+  // Checking for Electron
+  // @ts-ignore
+  const isElectron = window.electron !== undefined
 
   const formatDateForInput = (date: Date) => {
     const year = date.getFullYear()
@@ -72,28 +77,71 @@ export default function CustomerDetails() {
     loadTemplates()
 
     // @ts-ignore
-    const removeListener = window.electron.ipcRenderer.on('mobile-file-uploaded', (_, filePath) => {
-      if (activeUploadContext === 'vehicle') {
-        setUploadedFiles(prev => [...prev, filePath])
-      } else if (activeUploadContext === 'history') {
-        setNewHistoryEntry(prev => ({ ...prev, filePaths: [...prev.filePaths, filePath] }))
-      }
-    })
-    return () => { removeListener() }
+    if(isElectron) {
+      // @ts-ignore
+      const removeListener = window.electron.ipcRenderer.on('mobile-file-uploaded', (_, filePath) => {
+        if (activeUploadContext === 'vehicle') {
+          setUploadedFiles(prev => [...prev, filePath])
+        } else if (activeUploadContext === 'history') {
+          setNewHistoryEntry(prev => ({ ...prev, filePaths: [...prev.filePaths, filePath] }))
+        }
+      })
+      return () => { removeListener() }
+    }
   }, [id, activeUploadContext])
+
+  const loadCustomer = async (customerId: string) => {
+    try {
+      // Use unified API
+      const data = await api.customers.getOne(parseInt(customerId))
+      setCustomer(data)
+      setEditForm(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   const loadTemplates = async () => {
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-service-templates')
+      const data = await api.templates.getAll()
       setTemplates(data)
     } catch (err) {
       console.error(err)
     }
   }
 
+  const handleSaveCustomer = async () => {
+      try {
+          await api.customers.update({
+              id: customer.id,
+              ...editForm
+          })
+          setIsEditing(false)
+          loadCustomer(customer.id)
+      } catch (err) {
+          console.error(err);
+          alert('Fehler beim Speichern');
+      }
+  }
+  
+  const handleDeleteCustomer = async () => {
+    if(!confirm('Wirklich löschen?')) return;
+    try {
+        await api.customers.delete(customer.id)
+        navigate('/customers')
+    } catch(err) {
+        console.error(err)
+        alert('Fehler beim Löschen')
+    }
+  }
+
   const startMobileUpload = async (context: 'vehicle' | 'history') => {
     setActiveUploadContext(context)
+    if (!isElectron) {
+        alert("Mobile Upload ist nur am PC verfügbar")
+        return
+    }
+    
     try {
       // @ts-ignore
       const { url, publicIp } = await window.electron.ipcRenderer.invoke('start-mobile-upload')
@@ -108,14 +156,16 @@ export default function CustomerDetails() {
     }
   }
 
+
   const handleCloseMobileUpload = async () => {
     setShowQrModal(false)
     setActiveUploadContext(null)
     // @ts-ignore
-    await window.electron.ipcRenderer.invoke('stop-mobile-upload')
+    if(isElectron) await window.electron.ipcRenderer.invoke('stop-mobile-upload')
   }
 
   const handleAnalyzeFile = async (filePath: string) => {
+    if(!isElectron) return
     setIsAnalyzing(true)
     try {
       // @ts-ignore
@@ -145,16 +195,24 @@ export default function CustomerDetails() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // @ts-ignore
-    const path = file.path
-    setUploadedFiles(prev => [...prev, path])
+    if(isElectron) {
+        // @ts-ignore
+        const path = file.path
+        setUploadedFiles(prev => [...prev, path])
+    } else {
+        // Web Mode: We can't get the path, so just pretend for now or upload
+        // TODO: Implement actual file upload for web
+        console.log("File selected (Web):", file.name)
+        // For now, allow UI to show it
+        setUploadedFiles(prev => [...prev, file.name])
+    }
+    
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleAddVehicle = async () => {
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('create-vehicle', {
+      await api.vehicles.create({
         customerId: customer.id,
         ...newVehicleData,
         mileage: newVehicleData.mileage ? parseInt(newVehicleData.mileage) : null,
@@ -202,8 +260,7 @@ export default function CustomerDetails() {
 
   const handleSaveVehicle = async (vehicleId: number) => {
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('update-vehicle', {
+      await api.vehicles.update({
         id: vehicleId,
         ...tempVehicleData,
         mileage: tempVehicleData.mileage ? parseInt(tempVehicleData.mileage) : null,
@@ -214,16 +271,6 @@ export default function CustomerDetails() {
     } catch (err) {
       console.error(err)
       alert('Fehler beim Speichern der Fahrzeugdaten')
-    }
-  }
-
-  const loadCustomer = async (customerId: string) => {
-    try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-customer', parseInt(customerId))
-      setCustomer(data)
-    } catch (err) {
-      console.error(err)
     }
   }
 
@@ -240,21 +287,6 @@ export default function CustomerDetails() {
     setIsEditing(!isEditing)
   }
 
-  const handleSaveCustomer = async () => {
-      try {
-          // @ts-ignore
-          await window.electron.ipcRenderer.invoke('update-customer', {
-              id: customer.id,
-              ...editForm
-          })
-          setIsEditing(false)
-          loadCustomer(customer.id.toString())
-      } catch (err) {
-          console.error(err)
-          alert('Fehler beim Speichern')
-      }
-  }
-
   const getTireStorageLabel = (spot: string | null) => {
     if (!spot) return '-'
     if (customer?.tireStorageSpotData?.label) return customer.tireStorageSpotData.label
@@ -265,20 +297,11 @@ export default function CustomerDetails() {
     return `${colLabel}${row + 1}`
   }
 
-  const handleDeleteCustomer = async () => {
-      if (window.confirm('Sind Sie sicher, dass Sie diesen Kunden und alle zugehörigen Daten löschen möchten? Dies kann nicht rückgängig gemacht werden.')) {
-          try {
-              // @ts-ignore
-              await window.electron.ipcRenderer.invoke('delete-customer', customer.id)
-              navigate('/')
-          } catch (err) {
-              console.error(err)
-              alert('Fehler beim Löschen')
-          }
-      }
-  }
-
   const handleAddDocument = async () => {
+      if(!isElectron) {
+        alert("Dokumenten-Upload im Web-Modus noch nicht verfügbar.")
+        return
+      }
       // @ts-ignore
       const filePaths = await window.electron.ipcRenderer.invoke('select-file')
       if (filePaths && filePaths.length > 0) {
@@ -297,6 +320,7 @@ export default function CustomerDetails() {
   }
 
   const handleSelectHistoryFiles = async () => {
+      if(!isElectron) return
       // @ts-ignore
       const filePaths = await window.electron.ipcRenderer.invoke('select-file')
       if (filePaths && filePaths.length > 0) {
@@ -322,8 +346,7 @@ export default function CustomerDetails() {
 
   const handleSaveHistoryEdit = async () => {
       try {
-          // @ts-ignore
-          await window.electron.ipcRenderer.invoke('update-history-entry', {
+          await api.history.update({
               id: selectedHistoryEntry.id,
               customerId: customer.id,
               description: historyEditData.description,
@@ -341,6 +364,7 @@ export default function CustomerDetails() {
   }
 
   const openFile = async (filePath: string) => {
+    if(!isElectron) return
     // @ts-ignore
     await window.electron.ipcRenderer.invoke('open-file', filePath)
   }
@@ -349,8 +373,7 @@ export default function CustomerDetails() {
     e.preventDefault()
     if (!customer) return
     try {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('add-history-entry', {
+        await api.history.create({
             customerId: customer.id,
             vehicleId: newHistoryEntry.vehicleId,
             description: newHistoryEntry.description,

@@ -2,6 +2,9 @@ import express from 'express'
 import cors from 'cors'
 import { join } from 'path'
 import customerRoutes from './routes/customer.routes'
+import vehicleRoutes from './routes/vehicle.routes'
+import historyRoutes from './routes/history.routes'
+import templateRoutes from './routes/template.routes'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -44,6 +47,9 @@ app.use('/uploads', express.static(join(__dirname, '../../uploads')))
 
 // API Routen einbinden
 app.use('/api/customers', customerRoutes)
+app.use('/api/vehicles', vehicleRoutes)
+app.use('/api/history', historyRoutes)
+app.use('/api/templates', templateRoutes)
 
 // Frontend ausliefern (Die App selbst)
 // Wir gehen davon aus, dass der 'out/renderer' Ordner existiert (durch npm run build)

@@ -5,6 +5,7 @@ import {
   User, MapPin, Phone, Car, FileText, Upload, Smartphone, 
   X, Save, ArrowLeft, ScanLine, Trash2, Loader2, ExternalLink
 } from 'lucide-react'
+import { api } from '../api'
 
 export default function CreateCustomer() {
   const navigate = useNavigate()
@@ -31,19 +32,20 @@ export default function CreateCustomer() {
   const [tunnelPassword, setTunnelPassword] = useState('')
   const [extractCustomerData, setExtractCustomerData] = useState(false)
 
+  // @ts-ignore
+  const isElectron = window.electron !== undefined
+
   useEffect(() => {
     // @ts-ignore
-    const removeListener = window.electron.ipcRenderer.on('mobile-file-uploaded', (_, filePath) => {
-      setSelectedFiles(prev => {
-        const combined = [...prev, filePath]
-        return Array.from(new Set(combined))
+    if (isElectron) {
+      // @ts-ignore
+      const removeListener = window.electron.ipcRenderer.on('mobile-file-uploaded', (_, filePath) => {
+        setSelectedFiles(prev => {
+          const combined = [...prev, filePath]
+          return Array.from(new Set(combined))
+        })
       })
-      // Optional: Close modal automatically or keep open for more
-      // setShowQrModal(false) 
-    })
-
-    return () => {
-      removeListener()
+      return () => { removeListener() }
     }
   }, [])
 
@@ -52,6 +54,7 @@ export default function CreateCustomer() {
   }
 
   const handleSelectFiles = async () => {
+    if (!isElectron) return
     // @ts-ignore
     const files = await window.electron.ipcRenderer.invoke('select-file')
     if (files && files.length > 0) {
@@ -64,6 +67,10 @@ export default function CreateCustomer() {
   }
 
   const handleMobileUpload = async () => {
+    if (!isElectron) {
+        alert("Mobile Upload ist nur am PC verfügbar.")
+        return
+    }
     try {
       // @ts-ignore
       const { url, publicIp } = await window.electron.ipcRenderer.invoke('start-mobile-upload')
@@ -79,8 +86,10 @@ export default function CreateCustomer() {
 
   const handleCloseMobileUpload = async () => {
     setShowQrModal(false)
-    // @ts-ignore
-    await window.electron.ipcRenderer.invoke('stop-mobile-upload')
+    if (isElectron) {
+        // @ts-ignore
+        await window.electron.ipcRenderer.invoke('stop-mobile-upload')
+    }
   }
 
   const handleRemoveFile = (indexToRemove: number) => {
@@ -88,6 +97,7 @@ export default function CreateCustomer() {
   }
 
   const handleAnalyze = async (filePath: string) => {
+    if (!isElectron) return
     setAnalyzingFile(filePath)
     try {
       // @ts-ignore
@@ -119,13 +129,13 @@ export default function CreateCustomer() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('create-customer', {
+        await api.customers.create({
             ...formData,
-            filePaths: selectedFiles
+            // @ts-ignore - The API will filter this or server will ignore it for now
+            filePaths: isElectron ? selectedFiles : [] 
         })
         alert('Kunde angelegt!')
-        navigate('/')
+        navigate('/customers') 
     } catch (err) {
         console.error(err)
         alert('Fehler beim Anlegen')

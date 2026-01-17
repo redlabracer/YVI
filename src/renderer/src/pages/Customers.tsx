@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus, User, Phone, MapPin, Car, ChevronRight } from 'lucide-react'
+import { api } from '../api'
 
 export default function Customers() {
   const [customers, setCustomers] = useState<any[]>([])
@@ -13,8 +14,7 @@ export default function Customers() {
 
   const loadCustomers = async () => {
     try {
-        // @ts-ignore
-        const data = await window.electron.ipcRenderer.invoke('get-customers')
+        const data = await api.customers.getAll() // Use unified API
         setCustomers(data)
     } catch (err) {
         console.error(err)

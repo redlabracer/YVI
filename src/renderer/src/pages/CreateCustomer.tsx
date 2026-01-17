@@ -47,6 +47,7 @@ export default function CreateCustomer() {
       })
       return () => { removeListener() }
     }
+    return undefined
   }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {

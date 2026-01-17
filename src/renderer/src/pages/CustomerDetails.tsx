@@ -88,6 +88,7 @@ export default function CustomerDetails() {
       })
       return () => { removeListener() }
     }
+    return undefined
   }, [id, activeUploadContext])
 
   const loadCustomer = async (customerId: string) => {

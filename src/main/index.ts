@@ -5,6 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { PrismaClient } from '@prisma/client'
 import OpenAI from 'openai'
 import { startMobileServer, stopMobileServer } from './mobile-server'
+import { logger, setupLoggerIPC } from './logger'
 
 // Initialize Prisma with a fixed location for the DB in production
 const dbPath = is.dev 
@@ -12,11 +13,23 @@ const dbPath = is.dev
   : `file:${join(app.getPath('userData'), 'database.db')}`
 
 const prisma = new PrismaClient({
+  log: [
+    { emit: 'event', level: 'warn' },
+    { emit: 'event', level: 'error' }
+  ],
   datasources: {
     db: {
       url: dbPath
     }
   }
+})
+
+prisma.$on('warn', (e) => {
+  logger.warn('Prisma Warning', e)
+})
+
+prisma.$on('error', (e) => {
+  logger.error('Prisma Error', e)
 })
 
 // IPC Handlers
@@ -1319,6 +1332,10 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  logger.init()
+  setupLoggerIPC()
+  logger.info('Application starting...')
+
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.kfzwerkstatt')
 
@@ -1342,6 +1359,7 @@ app.whenReady().then(() => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
+  logger.info('All windows closed')
   if (process.platform !== 'darwin') {
     app.quit()
   }

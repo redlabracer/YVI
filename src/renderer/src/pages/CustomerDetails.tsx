@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import { 
   ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, MapPin, 
   Car, FileText, History, Plus, Upload, Calendar, DollarSign,
-  File, ExternalLink, Package, Wand2, Loader2, Smartphone, ScanLine
+  File, ExternalLink, Package, Wand2, Loader2, Smartphone
 } from 'lucide-react'
 
 export default function CustomerDetails() {

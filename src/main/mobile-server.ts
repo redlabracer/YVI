@@ -8,6 +8,7 @@ import { Server } from 'http'
 import { promises as fs } from 'fs'
 import localtunnel from 'localtunnel'
 import axios from 'axios'
+import { logger } from './logger'
 
 let server: Server | null = null
 let tunnel: localtunnel.Tunnel | null = null
@@ -145,7 +146,7 @@ export const startMobileServer = async (mainWindow: BrowserWindow): Promise<{ ur
       try {
         // Try to start localtunnel
         tunnel = await localtunnel({ port: PORT })
-        console.log('Tunnel started at:', tunnel.url)
+        logger.info('Tunnel started at:', { url: tunnel.url })
         
         // Fetch public IP for password
         let publicIp = ''
@@ -153,12 +154,12 @@ export const startMobileServer = async (mainWindow: BrowserWindow): Promise<{ ur
           const ipRes = await axios.get('https://api.ipify.org?format=json')
           publicIp = ipRes.data.ip
         } catch (e) {
-          console.error('Failed to fetch public IP', e)
+          logger.warn('Failed to fetch public IP', e)
         }
 
         resolve({ url: tunnel.url, publicIp })
       } catch (err) {
-        console.error('Tunnel failed, falling back to local IP:', err)
+        logger.error('Tunnel failed, falling back to local IP:', err)
         const ip = getLocalIp()
         resolve({ url: `http://${ip}:${PORT}` })
       }

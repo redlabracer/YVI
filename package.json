@@ -18,7 +18,8 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
-    "build:linux": "npm run build && electron-builder --linux"
+    "build:linux": "npm run build && electron-builder --linux",
+    "serve": "tsx src/server/index.ts"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",
@@ -62,6 +63,7 @@
     "prettier": "^3.2.5",
     "prisma": "^5.10.2",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.7.1",
     "typescript": "^5.4.2",
     "vite": "^5.1.5"
   }

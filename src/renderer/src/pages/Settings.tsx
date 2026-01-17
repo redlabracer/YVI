@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { 
   Moon, Sun, Key, Database, Save, RefreshCw, ShieldCheck, 
-  CheckCircle2, AlertCircle, Loader2, BrainCircuit, Wrench
+  CheckCircle2, AlertCircle, Loader2, BrainCircuit
 } from 'lucide-react'
 
 export default function Settings() {

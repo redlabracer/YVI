@@ -1,3 +1,4 @@
+import { logger } from './logger'
 
 export function runMigrations() {
   return new Promise((resolve) => {
@@ -13,7 +14,7 @@ export function runMigrations() {
     // In a real production app, you bundle 'prisma migrate deploy' and the migration files.
     // Since the user is currently in dev mode but wants "production behavior" for the DB update:
     
-    console.log('Checking database...')
+    logger.info('Checking database...')
     // We rely on the fact that we already ran 'prisma db push' in the previous step manually.
     // To make it "automatic" for the future, we would need a migration runner.
     resolve(true)

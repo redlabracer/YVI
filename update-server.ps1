@@ -40,9 +40,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 5. Server starten
-Write-Host "✅ Update erfolgreich!" -ForegroundColor Green
-Write-Host "🚀 Starte Server..." -ForegroundColor Green
+Write-Host "Update erfolgreich!" -ForegroundColor Green
+Write-Host "Starte Server..." -ForegroundColor Green
 Write-Host "--------------------------------"
-Write-Host "Drücken Sie jetzt STRG+C um den Server zu stoppen, wenn Sie fertig sind."
+Write-Host "Druecken Sie jetzt STRG+C um den Server zu stoppen."
 
 npm run serve

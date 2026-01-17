@@ -11,7 +11,9 @@ import {
   Car,
   User,
   Package,
-  Menu // Add Menu icon
+  Menu, // Add Menu icon
+  Briefcase,
+  Wrench
 } from 'lucide-react'
 
 export default function Layout() {

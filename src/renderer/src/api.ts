@@ -357,8 +357,11 @@ export const api = {
               const formData = new FormData();
               formData.append('file', file);
               
+              const rawServerUrl = localStorage.getItem('serverUrl');
+              const serverUrl = rawServerUrl ? rawServerUrl.replace(/\/$/, '') : '';
+              const url = serverUrl ? `${serverUrl}/api/upload` : '/api/upload';
               const auth = localStorage.getItem('auth') || 'Basic VGVyaGFhZzp0ZXJoYWFn';
-              const response = await fetch('/api/upload', {
+              const response = await fetch(url, {
                   method: 'POST',
                   headers: {
                       'Authorization': auth
@@ -369,6 +372,103 @@ export const api = {
               if (!response.ok) throw new Error('Upload failed');
               const result = await response.json();
               return result.path;
+          }
+      }
+  },
+
+  // --- DOKUMENTE (Documents) ---
+  documents: {
+      // Analyze registration document with AI
+      analyze: async (file: File, extractCustomerData: boolean = false) => {
+          if (isElectron) {
+              // @ts-ignore - In Electron, use IPC with file path
+              return await window.electron.ipcRenderer.invoke('analyze-registration-doc', { 
+                  filePath: (file as any).path, 
+                  extractCustomerData 
+              });
+          } else {
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('extractCustomerData', String(extractCustomerData));
+              
+              const rawServerUrl = localStorage.getItem('serverUrl');
+              const serverUrl = rawServerUrl ? rawServerUrl.replace(/\/$/, '') : '';
+              const url = serverUrl ? `${serverUrl}/api/documents/analyze` : '/api/documents/analyze';
+              const auth = localStorage.getItem('auth') || 'Basic VGVyaGFhZzp0ZXJoYWFn';
+              
+              const response = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                      'Authorization': auth
+                  },
+                  body: formData
+              });
+              
+              if (!response.ok) {
+                  const error = await response.json();
+                  throw new Error(error.error || 'Analyse fehlgeschlagen');
+              }
+              return response.json();
+          }
+      },
+      
+      // Add documents to a customer
+      addToCustomer: async (customerId: number, files: File[]) => {
+          if (isElectron) {
+              // @ts-ignore - In Electron, use IPC with file paths
+              const filePaths = files.map(f => (f as any).path);
+              // @ts-ignore
+              return await window.electron.ipcRenderer.invoke('add-customer-documents', { customerId, filePaths });
+          } else {
+              const formData = new FormData();
+              formData.append('customerId', String(customerId));
+              files.forEach(file => formData.append('files', file));
+              
+              const rawServerUrl = localStorage.getItem('serverUrl');
+              const serverUrl = rawServerUrl ? rawServerUrl.replace(/\/$/, '') : '';
+              const url = serverUrl ? `${serverUrl}/api/documents/customer` : '/api/documents/customer';
+              const auth = localStorage.getItem('auth') || 'Basic VGVyaGFhZzp0ZXJoYWFn';
+              
+              const response = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                      'Authorization': auth
+                  },
+                  body: formData
+              });
+              
+              if (!response.ok) throw new Error('Upload fehlgeschlagen');
+              return response.json();
+          }
+      },
+      
+      // Get document URL for viewing
+      getUrl: async (documentId: number) => {
+          if (isElectron) {
+              // In Electron, open file directly
+              // @ts-ignore
+              return { openLocally: true, id: documentId };
+          } else {
+              return await request(`documents/${documentId}/url`);
+          }
+      },
+      
+      // Open a document
+      open: async (document: { id: number, path: string }) => {
+          if (isElectron) {
+              // @ts-ignore
+              await window.electron.ipcRenderer.invoke('open-file', document.path);
+          } else {
+              // In browser, open the URL in a new tab
+              const rawServerUrl = localStorage.getItem('serverUrl');
+              const serverUrl = rawServerUrl ? rawServerUrl.replace(/\/$/, '') : '';
+              
+              if (document.path.startsWith('/uploads')) {
+                  const url = serverUrl ? `${serverUrl}${document.path}` : document.path;
+                  window.open(url, '_blank');
+              } else {
+                  alert('Dieses Dokument ist lokal auf einem anderen Gerät gespeichert und kann nicht remote geöffnet werden.');
+              }
           }
       }
   },
@@ -425,6 +525,26 @@ export const api = {
         return await window.electron.ipcRenderer.invoke('delete-todo', id);
       } else {
         return await request(`todos/${id}`, 'DELETE');
+      }
+    }
+  },
+
+  // --- DASHBOARD ---
+  dashboard: {
+    getStats: async () => {
+      if (isElectron) {
+        // @ts-ignore
+        return await window.electron.ipcRenderer.invoke('get-dashboard-stats');
+      } else {
+        return await request('dashboard/stats');
+      }
+    },
+    search: async (query: string) => {
+      if (isElectron) {
+        // @ts-ignore
+        return await window.electron.ipcRenderer.invoke('global-search', query);
+      } else {
+        return await request(`dashboard/search?q=${encodeURIComponent(query)}`);
       }
     }
   }

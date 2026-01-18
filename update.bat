@@ -2,6 +2,29 @@
 echo --- YVI Server Update System ---
 echo.
 
+:: ===== SICHERHEITS-BACKUP VOR UPDATE =====
+echo 0. Erstelle Sicherheits-Backup der Datenbank...
+if not exist "prisma\backups" mkdir "prisma\backups"
+
+:: Erstelle Backup mit Datum und Uhrzeit
+for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set datetime=%%I
+set backup_name=dev_backup_%datetime:~0,8%_%datetime:~8,6%.db
+
+if exist "prisma\dev.db" (
+    copy "prisma\dev.db" "prisma\backups\%backup_name%" >nul
+    if %errorlevel% equ 0 (
+        echo    [OK] Backup erstellt: prisma\backups\%backup_name%
+    ) else (
+        echo    [WARNUNG] Backup konnte nicht erstellt werden!
+        echo    Moechten Sie trotzdem fortfahren? (J/N)
+        set /p continue=
+        if /i not "%continue%"=="J" exit /b 1
+    )
+) else (
+    echo    [INFO] Keine bestehende Datenbank gefunden - ueberspringe Backup
+)
+echo.
+
 echo 1. Hole Code von GitHub...
 git checkout package-lock.json
 git pull

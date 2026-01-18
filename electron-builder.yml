@@ -1,0 +1,63 @@
+appId: de.werkstatt-terhaag.yvi
+productName: YVI Werkstatt
+copyright: Copyright © 2024-2026 Werkstatt Terhaag
+
+# Verzeichnisse
+directories:
+  output: dist
+  buildResources: build
+
+# Windows Installer Konfiguration
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+# NSIS Installer Einstellungen
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: YVI Werkstatt
+  # Deutsche Sprache
+  language: 1031
+  installerLanguages:
+    - de
+
+# Auto-Update Konfiguration - GitHub Releases
+publish:
+  provider: github
+  owner: redlabracer       # Dein GitHub Benutzername
+  repo: YVI                # Dein Repository-Name
+  releaseType: release     # 'release' = öffentlich, 'draft' = Entwurf
+
+# Dateien die mit der App gebündelt werden
+files:
+  - out/**/*
+  - node_modules/**/*
+  - prisma/schema.prisma
+  - "!prisma/dev.db"
+  - "!prisma/backups/**"
+  - "!uploads/**"
+  - "!dist/**"
+  - "!.git/**"
+
+# Extra Ressourcen (werden nach resources/ kopiert)
+extraResources:
+  - from: prisma/migrations
+    to: prisma/migrations
+    filter:
+      - "**/*"
+
+# asar Archiv Einstellungen
+asar: true
+asarUnpack:
+  - "node_modules/.prisma/**/*"
+  - "node_modules/@prisma/client/**/*"

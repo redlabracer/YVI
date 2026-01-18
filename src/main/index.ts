@@ -4,8 +4,14 @@ import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { PrismaClient } from '@prisma/client'
 import OpenAI from 'openai'
+import { autoUpdater } from 'electron-updater'
 import { startMobileServer, stopMobileServer } from './mobile-server'
 import { logger, setupLoggerIPC } from './logger'
+
+// ===== AUTO-UPDATER KONFIGURATION =====
+autoUpdater.logger = logger
+autoUpdater.autoDownload = true
+autoUpdater.autoInstallOnAppQuit = true
 
 // Initialize Prisma with a fixed location for the DB in production
 const dbPath = is.dev 
@@ -43,6 +49,31 @@ ipcMain.handle('start-mobile-upload', async (event) => {
 
 ipcMain.handle('stop-mobile-upload', async () => {
   await stopMobileServer()
+})
+
+// ===== AUTO-UPDATER IPC HANDLERS =====
+ipcMain.handle('check-for-updates', async () => {
+  if (is.dev) {
+    return { updateAvailable: false, message: 'Updates im Entwicklungsmodus deaktiviert' }
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    return { 
+      updateAvailable: result?.updateInfo?.version !== app.getVersion(),
+      currentVersion: app.getVersion(),
+      latestVersion: result?.updateInfo?.version
+    }
+  } catch (error) {
+    return { updateAvailable: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
+})
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall()
 })
 
 ipcMain.on('open-external', (_, url) => {
@@ -1347,7 +1378,7 @@ app.whenReady().then(() => {
   logger.info('Application starting...')
 
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.kfzwerkstatt')
+  electronApp.setAppUserModelId('de.werkstatt-terhaag.yvi')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -1357,6 +1388,62 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  // ===== AUTO-UPDATER =====
+  // Nur in Produktion nach Updates suchen
+  if (!is.dev) {
+    // Update-Events
+    autoUpdater.on('checking-for-update', () => {
+      logger.info('Suche nach Updates...')
+    })
+
+    autoUpdater.on('update-available', (info) => {
+      logger.info('Update verfügbar:', info.version)
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow) {
+        mainWindow.webContents.send('update-available', info)
+      }
+    })
+
+    autoUpdater.on('update-not-available', () => {
+      logger.info('App ist aktuell')
+    })
+
+    autoUpdater.on('download-progress', (progress) => {
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow) {
+        mainWindow.webContents.send('update-progress', progress)
+      }
+    })
+
+    autoUpdater.on('update-downloaded', (info) => {
+      logger.info('Update heruntergeladen:', info.version)
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      if (mainWindow) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'Update bereit',
+          message: `Version ${info.version} wurde heruntergeladen.`,
+          detail: 'Das Update wird beim nächsten Neustart installiert. Möchten Sie jetzt neu starten?',
+          buttons: ['Später', 'Jetzt neu starten'],
+          defaultId: 1
+        }).then((result) => {
+          if (result.response === 1) {
+            autoUpdater.quitAndInstall()
+          }
+        })
+      }
+    })
+
+    autoUpdater.on('error', (error) => {
+      logger.error('Auto-Updater Fehler:', error)
+    })
+
+    // Nach Updates suchen (nach 3 Sekunden, damit App erst startet)
+    setTimeout(() => {
+      autoUpdater.checkForUpdatesAndNotify()
+    }, 3000)
+  }
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

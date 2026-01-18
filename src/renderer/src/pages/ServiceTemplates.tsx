@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { 
   Plus, FileText, Edit2, Trash2, X, Save, Search, LayoutTemplate 
 } from 'lucide-react'
+import { api } from '../api'
 
 export default function ServiceTemplates() {
   const [templates, setTemplates] = useState<any[]>([])
@@ -15,11 +16,10 @@ export default function ServiceTemplates() {
 
   const loadTemplates = async () => {
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-service-templates')
+      const data = await api.templates.getAll()
       setTemplates(data)
     } catch (err) {
-      console.error(err)
+      console.error('Error loading templates:', err)
     }
   }
 
@@ -27,11 +27,9 @@ export default function ServiceTemplates() {
     e.preventDefault()
     try {
       if (currentTemplate.id) {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('update-service-template', currentTemplate)
+        await api.templates.update(currentTemplate)
       } else {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('create-service-template', {
+        await api.templates.create({
           title: currentTemplate.title,
           description: currentTemplate.description
         })
@@ -40,7 +38,7 @@ export default function ServiceTemplates() {
       setCurrentTemplate({ id: 0, title: '', description: '' })
       loadTemplates()
     } catch (err) {
-      console.error(err)
+      console.error('Error saving template:', err)
       alert('Fehler beim Speichern')
     }
   }
@@ -53,11 +51,10 @@ export default function ServiceTemplates() {
   const handleDelete = async (id: number) => {
     if (confirm('Möchten Sie diese Vorlage wirklich löschen?')) {
       try {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('delete-service-template', id)
+        await api.templates.delete(id)
         loadTemplates()
       } catch (err) {
-        console.error(err)
+        console.error('Error deleting template:', err)
         alert('Fehler beim Löschen')
       }
     }

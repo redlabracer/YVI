@@ -25,7 +25,7 @@ export default function CreateCustomer() {
     fuelType: '',
     transmission: ''
   })
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([])
+  const [selectedFiles, setSelectedFiles] = useState<{ path: string; file?: File }[]>([])
   const [analyzingFile, setAnalyzingFile] = useState<string | null>(null)
   const [showQrModal, setShowQrModal] = useState(false)
   const [qrCodeUrl, setQrCodeUrl] = useState('')
@@ -41,8 +41,9 @@ export default function CreateCustomer() {
       // @ts-ignore
       const removeListener = window.electron.ipcRenderer.on('mobile-file-uploaded', (_, filePath) => {
         setSelectedFiles(prev => {
-          const combined = [...prev, filePath]
-          return Array.from(new Set(combined))
+          // Prüfe auf Duplikate
+          if (prev.some(f => f.path === filePath)) return prev
+          return [...prev, { path: filePath }]
         })
       })
       return () => { removeListener() }
@@ -55,15 +56,34 @@ export default function CreateCustomer() {
   }
 
   const handleSelectFiles = async () => {
-    if (!isElectron) return
-    // @ts-ignore
-    const files = await window.electron.ipcRenderer.invoke('select-file')
-    if (files && files.length > 0) {
-      // Append new files and remove duplicates
-      setSelectedFiles(prev => {
-        const combined = [...prev, ...files]
-        return Array.from(new Set(combined))
-      })
+    if (isElectron) {
+      // @ts-ignore
+      const files = await window.electron.ipcRenderer.invoke('select-file')
+      if (files && files.length > 0) {
+        // Append new files and remove duplicates
+        setSelectedFiles(prev => {
+          const newFiles = files.filter((f: string) => !prev.some(p => p.path === f))
+          return [...prev, ...newFiles.map((f: string) => ({ path: f }))]
+        })
+      }
+    } else {
+      // Web mode: use file input
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.multiple = true
+      input.accept = 'image/*,.pdf'
+      input.onchange = (e) => {
+        const files = (e.target as HTMLInputElement).files
+        if (files && files.length > 0) {
+          setSelectedFiles(prev => {
+            const newFiles = Array.from(files)
+              .filter(f => !prev.some(p => p.path === f.name))
+              .map(f => ({ path: f.name, file: f }))
+            return [...prev, ...newFiles]
+          })
+        }
+      }
+      input.click()
     }
   }
 
@@ -97,12 +117,20 @@ export default function CreateCustomer() {
     setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove))
   }
 
-  const handleAnalyze = async (filePath: string) => {
-    if (!isElectron) return
-    setAnalyzingFile(filePath)
+  const handleAnalyze = async (fileInfo: { path: string; file?: File }) => {
+    setAnalyzingFile(fileInfo.path)
     try {
-      // @ts-ignore
-      const result = await window.electron.ipcRenderer.invoke('analyze-registration-doc', { filePath, extractCustomerData })
+      let result;
+      if (isElectron && !fileInfo.file) {
+        // @ts-ignore - Electron mode with file path
+        result = await window.electron.ipcRenderer.invoke('analyze-registration-doc', { filePath: fileInfo.path, extractCustomerData })
+      } else if (fileInfo.file) {
+        // Web mode with File object
+        result = await api.documents.analyze(fileInfo.file, extractCustomerData)
+      } else {
+        throw new Error('Keine Datei verfügbar für Analyse')
+      }
+      
       if (result) {
         setFormData(prev => ({
           ...prev,
@@ -130,10 +158,22 @@ export default function CreateCustomer() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+        // Für Web-Modus: Lade zuerst die Dateien hoch
+        let filePaths: string[] = []
+        if (isElectron) {
+            filePaths = selectedFiles.map(f => f.path)
+        } else if (selectedFiles.some(f => f.file)) {
+            // Web mode: Dateien müssen erst hochgeladen werden
+            const uploadPromises = selectedFiles
+              .filter(f => f.file)
+              .map(f => api.files.upload(f.file!))
+            filePaths = await Promise.all(uploadPromises)
+        }
+        
         await api.customers.create({
             ...formData,
             // @ts-ignore - The API will filter this or server will ignore it for now
-            filePaths: isElectron ? selectedFiles : [] 
+            filePaths
         })
         alert('Kunde angelegt!')
         navigate('/customers') 
@@ -419,11 +459,11 @@ export default function CreateCustomer() {
                 <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
                   <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Ausgewählte Dateien</h3>
                   <div className="space-y-2">
-                    {selectedFiles.map((file, index) => (
+                    {selectedFiles.map((fileInfo, index) => (
                       <div key={index} className="bg-gray-50 dark:bg-gray-700 p-3 rounded-xl border border-gray-100 dark:border-gray-600">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[150px]" title={file}>
-                            {file.split(/[\\/]/).pop()}
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate max-w-[150px]" title={fileInfo.path}>
+                            {fileInfo.path.split(/[\\/]/).pop()}
                           </span>
                           <button 
                             type="button" 
@@ -436,15 +476,15 @@ export default function CreateCustomer() {
                         </div>
                         <button 
                           type="button" 
-                          onClick={() => handleAnalyze(file)}
+                          onClick={() => handleAnalyze(fileInfo)}
                           disabled={!!analyzingFile}
                           className={`w-full py-1.5 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all ${
-                            analyzingFile === file 
+                            analyzingFile === fileInfo.path 
                               ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' 
                               : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400'
                           }`}
                         >
-                          {analyzingFile === file ? (
+                          {analyzingFile === fileInfo.path ? (
                             <>
                               <Loader2 size={12} className="animate-spin" />
                               Analysiere...

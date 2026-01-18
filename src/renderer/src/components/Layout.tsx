@@ -15,6 +15,7 @@ import {
   Briefcase,
   Wrench
 } from 'lucide-react'
+import { api } from '../api'
 
 export default function Layout() {
   const navigate = useNavigate()
@@ -75,10 +76,14 @@ export default function Layout() {
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (searchQuery.length > 1) {
-        // @ts-ignore
-        const results = await window.electron.ipcRenderer.invoke('global-search', searchQuery)
-        setSearchResults(results)
-        setShowResults(true)
+        try {
+          const results = await api.dashboard.search(searchQuery)
+          setSearchResults(results)
+          setShowResults(true)
+        } catch (err) {
+          console.error('Search error:', err)
+          setSearchResults([])
+        }
       } else {
         setSearchResults([])
         setShowResults(false)

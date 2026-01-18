@@ -28,6 +28,7 @@
     "axios": "^1.13.2",
     "clsx": "^2.1.0",
     "cors": "^2.8.5",
+    "electron-updater": "^6.7.3",
     "express": "^5.2.1",
     "keytar": "^7.9.0",
     "localtunnel": "^2.0.2",

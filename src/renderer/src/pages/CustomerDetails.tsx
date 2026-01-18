@@ -19,7 +19,7 @@ export default function CustomerDetails() {
   const [showQrModal, setShowQrModal] = useState(false)
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [tunnelPassword, setTunnelPassword] = useState('')
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<{ path: string; file?: File }[]>([])
   const [activeUploadContext, setActiveUploadContext] = useState<'vehicle' | 'history' | null>(null)
   
   // Checking for Electron
@@ -81,7 +81,7 @@ export default function CustomerDetails() {
       // @ts-ignore
       const removeListener = window.electron.ipcRenderer.on('mobile-file-uploaded', (_, filePath) => {
         if (activeUploadContext === 'vehicle') {
-          setUploadedFiles(prev => [...prev, filePath])
+          setUploadedFiles(prev => [...prev, { path: filePath }])
         } else if (activeUploadContext === 'history') {
           setNewHistoryEntry(prev => ({ ...prev, filePaths: [...prev.filePaths, filePath] }))
         }
@@ -165,12 +165,19 @@ export default function CustomerDetails() {
     if(isElectron) await window.electron.ipcRenderer.invoke('stop-mobile-upload')
   }
 
-  const handleAnalyzeFile = async (filePath: string) => {
-    if(!isElectron) return
+  const handleAnalyzeFile = async (fileOrPath: File | string) => {
     setIsAnalyzing(true)
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('analyze-registration-doc', { filePath, extractCustomerData: false })
+      let data;
+      if (isElectron && typeof fileOrPath === 'string') {
+        // @ts-ignore - Electron mode with file path
+        data = await window.electron.ipcRenderer.invoke('analyze-registration-doc', { filePath: fileOrPath, extractCustomerData: false })
+      } else if (fileOrPath instanceof File) {
+        // Web mode with File object
+        data = await api.documents.analyze(fileOrPath, false)
+      } else {
+        throw new Error('Ungültiger Dateityp')
+      }
       
       setNewVehicleData(prev => ({
         ...prev,
@@ -197,8 +204,13 @@ export default function CustomerDetails() {
     if (!file) return
 
     try {
-        const path = await api.files.upload(file)
-        setUploadedFiles(prev => [...prev, path])
+        if (isElectron) {
+            const path = await api.files.upload(file)
+            setUploadedFiles(prev => [...prev, { path }])
+        } else {
+            // Im Web-Modus: speichere sowohl den Namen als auch das File-Objekt
+            setUploadedFiles(prev => [...prev, { path: file.name, file }])
+        }
     } catch (error) {
         console.error("Upload failed:", error)
         alert("Upload fehlgeschlagen")
@@ -295,37 +307,80 @@ export default function CustomerDetails() {
   }
 
   const handleAddDocument = async () => {
-      if(!isElectron) {
-        alert("Dokumenten-Upload im Web-Modus noch nicht verfügbar.")
-        return
-      }
-      // @ts-ignore
-      const filePaths = await window.electron.ipcRenderer.invoke('select-file')
-      if (filePaths && filePaths.length > 0) {
-          try {
-              // @ts-ignore
-              await window.electron.ipcRenderer.invoke('add-customer-documents', {
-                  customerId: customer.id,
-                  filePaths
-              })
+      if (isElectron) {
+        // @ts-ignore - Electron mode: use file dialog
+        const filePaths = await window.electron.ipcRenderer.invoke('select-file')
+        if (filePaths && filePaths.length > 0) {
+            try {
+                // @ts-ignore
+                await window.electron.ipcRenderer.invoke('add-customer-documents', {
+                    customerId: customer.id,
+                    filePaths
+                })
+                loadCustomer(customer.id.toString())
+            } catch (err) {
+                console.error(err)
+                alert('Fehler beim Hochladen')
+            }
+        }
+      } else {
+        // Web mode: use file input
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.multiple = true
+        input.accept = 'image/*,.pdf'
+        input.onchange = async (e) => {
+          const files = (e.target as HTMLInputElement).files
+          if (files && files.length > 0) {
+            try {
+              await api.documents.addToCustomer(customer.id, Array.from(files))
               loadCustomer(customer.id.toString())
-          } catch (err) {
+            } catch (err) {
               console.error(err)
               alert('Fehler beim Hochladen')
+            }
           }
+        }
+        input.click()
       }
   }
 
   const handleSelectHistoryFiles = async () => {
-      if(!isElectron) return
-      // @ts-ignore
-      const filePaths = await window.electron.ipcRenderer.invoke('select-file')
-      if (filePaths && filePaths.length > 0) {
-          if (isEditingHistory) {
-              setHistoryEditData(prev => ({ ...prev, filePaths: [...prev.filePaths, ...filePaths] }))
-          } else {
-              setNewHistoryEntry(prev => ({ ...prev, filePaths: [...prev.filePaths, ...filePaths] }))
+      if (isElectron) {
+        // @ts-ignore - Electron mode: use file dialog
+        const filePaths = await window.electron.ipcRenderer.invoke('select-file')
+        if (filePaths && filePaths.length > 0) {
+            if (isEditingHistory) {
+                setHistoryEditData(prev => ({ ...prev, filePaths: [...prev.filePaths, ...filePaths] }))
+            } else {
+                setNewHistoryEntry(prev => ({ ...prev, filePaths: [...prev.filePaths, ...filePaths] }))
+            }
+        }
+      } else {
+        // Web mode: use file input - files will be uploaded when saving
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.multiple = true
+        input.accept = 'image/*,.pdf'
+        input.onchange = async (e) => {
+          const files = (e.target as HTMLInputElement).files
+          if (files && files.length > 0) {
+            // Im Web-Modus: Dateien sofort hochladen und Pfade speichern
+            try {
+              const uploadPromises = Array.from(files).map(f => api.files.upload(f))
+              const paths = await Promise.all(uploadPromises)
+              if (isEditingHistory) {
+                setHistoryEditData(prev => ({ ...prev, filePaths: [...prev.filePaths, ...paths] }))
+              } else {
+                setNewHistoryEntry(prev => ({ ...prev, filePaths: [...prev.filePaths, ...paths] }))
+              }
+            } catch (err) {
+              console.error('Upload failed:', err)
+              alert('Datei-Upload fehlgeschlagen')
+            }
           }
+        }
+        input.click()
       }
   }
 
@@ -360,10 +415,8 @@ export default function CustomerDetails() {
       }
   }
 
-  const openFile = async (filePath: string) => {
-    if(!isElectron) return
-    // @ts-ignore
-    await window.electron.ipcRenderer.invoke('open-file', filePath)
+  const openFile = async (document: { id: number, path: string, name?: string }) => {
+    await api.documents.open(document)
   }
 
   const handleAddHistory = async (e: React.FormEvent) => {
@@ -618,15 +671,15 @@ export default function CustomerDetails() {
                 {/* Uploaded Files List */}
                 {uploadedFiles.length > 0 && (
                   <div className="mb-4 space-y-2">
-                    {uploadedFiles.map((file, index) => (
+                    {uploadedFiles.map((uploadedFile, index) => (
                       <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
                         <div className="flex items-center gap-2 overflow-hidden">
                           <FileText size={16} className="text-gray-400 flex-shrink-0" />
-                          <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{file.split(/[\\/]/).pop()}</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300 truncate">{uploadedFile.path.split(/[\\/]/).pop()}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <button 
-                            onClick={() => handleAnalyzeFile(file)}
+                            onClick={() => handleAnalyzeFile(uploadedFile.file || uploadedFile.path)}
                             disabled={isAnalyzing}
                             className="text-xs bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2 py-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors flex items-center gap-1"
                           >
@@ -1219,7 +1272,7 @@ export default function CustomerDetails() {
               {customer.documents?.map((doc: any) => (
                 <div 
                   key={doc.id} 
-                  onClick={() => openFile(doc.path)}
+                  onClick={() => openFile(doc)}
                   className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-500 transition-all cursor-pointer flex flex-col"
                 >
                   <div className="aspect-square bg-gray-50 dark:bg-gray-700 rounded-lg mb-3 flex items-center justify-center overflow-hidden relative border border-gray-100 dark:border-gray-600">
@@ -1385,7 +1438,7 @@ export default function CustomerDetails() {
                           <div className="space-y-2">
                             {linkedDoc && (
                               <button 
-                                onClick={() => openFile(linkedDoc.path)}
+                                onClick={() => openFile(linkedDoc)}
                                 className="flex items-center gap-3 w-full p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl border border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-left"
                               >
                                 <FileText size={18} />
@@ -1395,7 +1448,7 @@ export default function CustomerDetails() {
                             {attachedDocs.map((doc: any) => (
                               <button 
                                 key={doc.id}
-                                onClick={() => openFile(doc.path)}
+                                onClick={() => openFile(doc)}
                                 className="flex items-center gap-3 w-full p-3 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
                               >
                                 <File size={18} />

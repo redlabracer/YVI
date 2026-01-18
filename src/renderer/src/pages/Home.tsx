@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import TodoList from '../components/TodoList'
+import { api } from '../api'
 import { 
   Calendar, 
   Clock, 
@@ -28,22 +29,20 @@ export default function Home() {
 
   const loadTodayAppointments = async () => {
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-dashboard-stats')
-      setTodayAppointments(data.todayAppointments)
+      const data = await api.dashboard.getStats()
+      setTodayAppointments(data.recentAppointments || [])
     } catch (err) {
-      console.error(err)
+      console.error('Error loading dashboard stats:', err)
     }
   }
 
   const handleCompleteAppointment = async (id: number) => {
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('complete-appointment', { appointmentId: id })
+      await api.appointments.complete({ appointmentId: id, date: new Date().toISOString() })
       setSelectedAppointment(null)
       loadTodayAppointments()
     } catch (err) {
-      console.error(err)
+      console.error('Error completing appointment:', err)
     }
   }
 

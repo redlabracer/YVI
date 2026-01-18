@@ -11,6 +11,8 @@ import uploadRoutes from './routes/upload.routes'
 import tireRoutes from './routes/tire.routes'
 import todoRoutes from './routes/todo.routes'
 import shopRoutes from './routes/shop.routes'
+import dashboardRoutes from './routes/dashboard.routes'
+import documentRoutes from './routes/document.routes'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -51,6 +53,14 @@ app.use((req, res, next) => {
 // Statische Dateien (für Bilder/Uploads)
 app.use('/uploads', express.static(join(__dirname, '../../uploads')))
 
+// Updates-Ordner für Auto-Updater (ohne Auth!)
+// Diese Dateien müssen öffentlich zugänglich sein für electron-updater
+const updatesPath = join(__dirname, '../../updates')
+app.use('/updates', (req, res, next) => {
+  // Umgehe Basic Auth für Updates
+  express.static(updatesPath)(req, res, next)
+})
+
 // API Routen einbinden
 app.use('/api/customers', customerRoutes)
 app.use('/api/appointments', appointmentRoutes)
@@ -62,6 +72,8 @@ app.use('/api/upload', uploadRoutes)
 app.use('/api/tires', tireRoutes)
 app.use('/api/todos', todoRoutes)
 app.use('/api/shop', shopRoutes)
+app.use('/api/dashboard', dashboardRoutes)
+app.use('/api/documents', documentRoutes)
 
 // Frontend ausliefern (Die App selbst)
 // Wir gehen davon aus, dass der 'out/renderer' Ordner existiert (durch npm run build)

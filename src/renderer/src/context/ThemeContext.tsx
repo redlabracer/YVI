@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { api } from '../api'
 
 type Theme = 'light' | 'dark'
 
@@ -17,12 +18,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [])
 
   const loadTheme = async () => {
-    // @ts-ignore
-    const settings = await window.electron.ipcRenderer.invoke('get-settings')
-    if (settings && settings.theme) {
-      setTheme(settings.theme as Theme)
-    } else {
-      // Default to dark if no settings exist yet
+    try {
+      const settings = await api.settings.get()
+      if (settings && settings.theme) {
+        setTheme(settings.theme as Theme)
+      } else {
+        // Default to dark if no settings exist yet
+        setTheme('dark')
+      }
+    } catch (err) {
+      console.error('Error loading theme:', err)
       setTheme('dark')
     }
   }
@@ -39,8 +44,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleTheme = async () => {
     const newTheme = theme === 'light' ? 'dark' : 'light'
     setTheme(newTheme)
-    // @ts-ignore
-    await window.electron.ipcRenderer.invoke('save-settings', { theme: newTheme })
+    try {
+      await api.settings.save({ theme: newTheme })
+    } catch (err) {
+      console.error('Error saving theme:', err)
+    }
   }
 
   return (

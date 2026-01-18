@@ -14,10 +14,12 @@ export default function Customers() {
 
   const loadCustomers = async () => {
     try {
+        console.log('[Customers] Loading customers...')
         const data = await api.customers.getAll() // Use unified API
+        console.log('[Customers] Loaded:', data)
         setCustomers(data)
     } catch (err) {
-        console.error(err)
+        console.error('[Customers] Error:', err)
     }
   }
 

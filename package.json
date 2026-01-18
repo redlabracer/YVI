@@ -1,9 +1,9 @@
 {
   "name": "kfz-werkstatt-app",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "KFZ Werkstatt Management Software",
   "main": "./out/main/index.js",
-  "author": "Werkstatt Terhaag",
+  "author": "redlabracer"
   "homepage": "https://www.electronjs.org",
   "scripts": {
     "format": "prettier --write .",

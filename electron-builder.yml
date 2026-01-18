@@ -53,6 +53,10 @@ extraResources:
     to: prisma/migrations
     filter:
       - "**/*"
+  - from: node_modules/.prisma
+    to: app/node_modules/.prisma
+    filter:
+      - "**/*"
 
 # asar Archiv Einstellungen
 # Deaktiviert wegen Prisma-Kompatibilität - Prisma braucht direkten Dateizugriff

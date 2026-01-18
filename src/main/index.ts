@@ -6,24 +6,6 @@ import OpenAI from 'openai'
 import { autoUpdater } from 'electron-updater'
 import { startMobileServer, stopMobileServer } from './mobile-server'
 import { logger, setupLoggerIPC } from './logger'
-
-// ===== PRISMA FÜR ELECTRON PRODUCTION =====
-// In production müssen wir den Pfad manuell setzen bevor PrismaClient importiert wird
-if (!is.dev) {
-  const resourcesPath = process.resourcesPath || join(app.getAppPath(), '..')
-  // Prisma sucht nach .prisma/client relativ zu node_modules
-  // Wir setzen den Pfad auf das app Verzeichnis
-  process.env.PRISMA_QUERY_ENGINE_LIBRARY = join(
-    resourcesPath, 
-    'app',
-    'node_modules',
-    '.prisma',
-    'client',
-    'query_engine-windows.dll.node'
-  )
-}
-
-// Dynamischer Import um sicherzustellen dass die env Variable gesetzt ist
 import { PrismaClient } from '@prisma/client'
 
 // ===== AUTO-UPDATER KONFIGURATION =====

@@ -1,9 +1,9 @@
 {
   "name": "kfz-werkstatt-app",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "KFZ Werkstatt Management Software",
   "main": "./out/main/index.js",
-  "author": "GitHub Copilot",
+  "author": "Werkstatt Terhaag",
   "homepage": "https://www.electronjs.org",
   "scripts": {
     "format": "prettier --write .",

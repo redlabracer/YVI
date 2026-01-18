@@ -57,3 +57,6 @@ extraResources:
 # asar Archiv Einstellungen
 # Deaktiviert wegen Prisma-Kompatibilität - Prisma braucht direkten Dateizugriff
 asar: false
+
+# Hook nach dem Packen - kopiert Prisma Dateien korrekt
+afterPack: ./scripts/afterPack.js

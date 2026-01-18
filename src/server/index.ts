@@ -3,8 +3,13 @@ import cors from 'cors'
 import { join } from 'path'
 import customerRoutes from './routes/customer.routes'
 import vehicleRoutes from './routes/vehicle.routes'
+import appointmentRoutes from './routes/appointment.routes'
 import historyRoutes from './routes/history.routes'
 import templateRoutes from './routes/template.routes'
+import settingsRoutes from './routes/settings.routes'
+import uploadRoutes from './routes/upload.routes'
+import tireRoutes from './routes/tire.routes'
+import todoRoutes from './routes/todo.routes'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -47,9 +52,14 @@ app.use('/uploads', express.static(join(__dirname, '../../uploads')))
 
 // API Routen einbinden
 app.use('/api/customers', customerRoutes)
+app.use('/api/appointments', appointmentRoutes)
 app.use('/api/vehicles', vehicleRoutes)
 app.use('/api/history', historyRoutes)
 app.use('/api/templates', templateRoutes)
+app.use('/api/settings', settingsRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/api/tires', tireRoutes)
+app.use('/api/todos', todoRoutes)
 
 // Frontend ausliefern (Die App selbst)
 // Wir gehen davon aus, dass der 'out/renderer' Ordner existiert (durch npm run build)

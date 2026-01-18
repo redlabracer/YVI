@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Package, Info, Plus, X as CloseIcon } from 'lucide-react'
+import { api } from '../api'
 
 interface StorageSpot {
   id: string
@@ -142,12 +143,9 @@ export default function TireStorage() {
 
   const loadData = async () => {
     try {
-      // @ts-ignore
       const [customerList, spotList] = await Promise.all([
-        // @ts-ignore
-        window.electron.ipcRenderer.invoke('get-customers'),
-        // @ts-ignore
-        window.electron.ipcRenderer.invoke('get-tire-spots')
+        api.customers.getAll(),
+        api.tires.getAll()
       ])
       
       setCustomers(customerList)
@@ -313,8 +311,7 @@ export default function TireStorage() {
       // Update Database
       try {
         // 1. Update the spot itself (label and status)
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('update-tire-spot', {
+        await api.tires.update({
           id: selectedSpot.id,
           label: selectedSpot.label,
           status: selectedSpot.status
@@ -326,8 +323,7 @@ export default function TireStorage() {
         
         for (const customer of previouslyLinked) {
           if (!currentIds.includes(customer.id)) {
-            // @ts-ignore
-            await window.electron.ipcRenderer.invoke('update-customer', {
+            await api.customers.update({
               id: customer.id,
               tireStorageSpot: null
             })
@@ -338,8 +334,7 @@ export default function TireStorage() {
         for (const id of currentIds) {
           const customer = customers.find(c => c.id === id)
           if (customer && customer.tireStorageSpot !== selectedSpot.id) {
-            // @ts-ignore
-            await window.electron.ipcRenderer.invoke('update-customer', {
+            await api.customers.update({
               id: customer.id,
               tireStorageSpot: selectedSpot.id
             })

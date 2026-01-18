@@ -196,16 +196,12 @@ export default function CustomerDetails() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if(isElectron) {
-        // @ts-ignore
-        const path = file.path
+    try {
+        const path = await api.files.upload(file)
         setUploadedFiles(prev => [...prev, path])
-    } else {
-        // Web Mode: We can't get the path, so just pretend for now or upload
-        // TODO: Implement actual file upload for web
-        console.log("File selected (Web):", file.name)
-        // For now, allow UI to show it
-        setUploadedFiles(prev => [...prev, file.name])
+    } catch (error) {
+        console.error("Upload failed:", error)
+        alert("Upload fehlgeschlagen")
     }
     
     if (fileInputRef.current) fileInputRef.current.value = ''

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { getHolidays } from '../utils/holidays'
+import { api } from '../api'
 import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, X, Trash2 } from 'lucide-react'
 
 export default function Calendar() {
@@ -47,8 +48,7 @@ export default function Calendar() {
           // For now, let's assume we might need to fetch it or it's in the loaded range if we are lucky.
           // Actually, better to fetch it directly to be sure.
           try {
-             // @ts-ignore
-             const apt = await window.electron.ipcRenderer.invoke('get-appointment', appointmentId)
+             const apt = await api.appointments.getOne(appointmentId)
              if (apt) {
                setCurrentDate(new Date(apt.start)) // Move calendar to that date
                setEditingAppointment(apt)
@@ -107,8 +107,7 @@ export default function Calendar() {
       if (formData.customerId) {
         setSelectedCustomerDetails(null) // Reset while fetching
         try {
-          // @ts-ignore
-          const customer = await window.electron.ipcRenderer.invoke('get-customer', parseInt(formData.customerId))
+          const customer = await api.customers.getOne(parseInt(formData.customerId))
           setSelectedCustomerDetails(customer)
           if (customer && customer.vehicles) {
             setCustomerVehicles(customer.vehicles)
@@ -128,8 +127,7 @@ export default function Calendar() {
 
   const loadServiceTemplates = async () => {
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-service-templates')
+      const data = await api.templates.getAll()
       setServiceTemplates(data)
     } catch (err) {
       console.error(err)
@@ -138,8 +136,7 @@ export default function Calendar() {
 
   const loadCustomers = async () => {
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-customers')
+      const data = await api.customers.getAll()
       setCustomers(data)
     } catch (err) {
       console.error(err)
@@ -155,8 +152,7 @@ export default function Calendar() {
     end.setDate(end.getDate() + (7 - end.getDay())) // End on Sunday
 
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-appointments', {
+      const data = await api.appointments.getAll({
         start: start.toISOString(),
         end: end.toISOString()
       })
@@ -174,8 +170,7 @@ export default function Calendar() {
     end.setDate(end.getDate() + (7 - end.getDay()))
 
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-shop-closures', {
+      const data = await api.shop.getClosures({
         start: start.toISOString(),
         end: end.toISOString()
       })
@@ -188,8 +183,7 @@ export default function Calendar() {
   const handleSaveClosure = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('create-shop-closure', closureFormData)
+      await api.shop.createClosure(closureFormData)
       setShowClosureModal(false)
       loadShopClosures()
     } catch (err) {
@@ -201,8 +195,7 @@ export default function Calendar() {
   const handleDeleteClosure = async (id: number) => {
     if (confirm('Betriebsurlaub wirklich löschen?')) {
       try {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('delete-shop-closure', id)
+        await api.shop.deleteClosure(id)
         loadShopClosures()
       } catch (err) {
         console.error(err)
@@ -272,14 +265,12 @@ export default function Calendar() {
     e.preventDefault()
     try {
       if (editingAppointment) {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('update-appointment', {
+        await api.appointments.update({
           id: editingAppointment.id,
           ...formData
         })
       } else {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('create-appointment', formData)
+        await api.appointments.create(formData)
       }
       setShowModal(false)
       loadAppointments()
@@ -293,8 +284,7 @@ export default function Calendar() {
     if (!editingAppointment) return
     if (confirm('Termin wirklich löschen?')) {
       try {
-        // @ts-ignore
-        await window.electron.ipcRenderer.invoke('delete-appointment', editingAppointment.id)
+        await api.appointments.delete(editingAppointment.id)
         setShowModal(false)
         loadAppointments()
       } catch (err) {
@@ -307,8 +297,7 @@ export default function Calendar() {
   const handleComplete = async () => {
     if (!editingAppointment) return
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('complete-appointment', {
+      await api.appointments.complete({
         appointmentId: editingAppointment.id,
         mileage: completeMileage ? parseInt(completeMileage) : undefined,
         description: formData.description,

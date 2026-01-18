@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { CheckSquare, Square, Trash2, Plus, User } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '../api'
 
 export default function TodoList() {
   const navigate = useNavigate()
@@ -17,8 +18,7 @@ export default function TodoList() {
 
   const loadTodos = async () => {
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-todos')
+      const data = await api.todos.getAll()
       setTodos(data)
     } catch (err) {
       console.error(err)
@@ -27,8 +27,7 @@ export default function TodoList() {
 
   const loadCustomers = async () => {
     try {
-      // @ts-ignore
-      const data = await window.electron.ipcRenderer.invoke('get-customers')
+      const data = await api.customers.getAll()
       setCustomers(data)
     } catch (err) {
       console.error(err)
@@ -40,8 +39,7 @@ export default function TodoList() {
     if (!newTodo.trim()) return
 
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('create-todo', {
+      await api.todos.create({
         title: newTodo,
         customerId: selectedCustomerId ? parseInt(selectedCustomerId) : null
       })
@@ -56,8 +54,7 @@ export default function TodoList() {
 
   const handleToggle = async (todo: any) => {
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('update-todo', {
+      await api.todos.update({
         id: todo.id,
         isDone: !todo.isDone
       })
@@ -69,8 +66,7 @@ export default function TodoList() {
 
   const handleDelete = async (id: number) => {
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('delete-todo', id)
+      await api.todos.delete(id)
       loadTodos()
     } catch (err) {
       console.error(err)

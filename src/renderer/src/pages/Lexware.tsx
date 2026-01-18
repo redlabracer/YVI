@@ -1,21 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react'
+import api from '../api'
 
 const Lexware = () => {
   const webviewRef = useRef<any>(null)
   const [credentials, setCredentials] = useState<{user: string, pass: string} | null>(null)
+  
+  // @ts-ignore
+  const isElectron = window.electron && typeof window.electron === 'object';
 
   useEffect(() => {
     const loadCredentials = async () => {
-      // @ts-ignore
-      const settings = await window.electron.ipcRenderer.invoke('get-settings')
-      if (settings && settings.lexwareUser && settings.lexwarePass) {
-        setCredentials({ user: settings.lexwareUser, pass: settings.lexwarePass })
+      try {
+        const settings = await api.settings.get()
+        if (settings && settings.lexwareUser && settings.lexwarePass) {
+          setCredentials({ user: settings.lexwareUser, pass: settings.lexwarePass })
+        }
+      } catch (err) {
+        console.error('Failed to load credentials', err);
       }
     }
     loadCredentials()
   }, [])
 
   useEffect(() => {
+    if (!isElectron) return;
+
     const webview = webviewRef.current
     if (!webview || !credentials) return
 
@@ -68,14 +77,35 @@ const Lexware = () => {
           }
         })();
       `
-      webview.executeJavaScript(script)
+      try {
+        webview.executeJavaScript(script)
+      } catch (e) {
+        console.error("Failed to execute JS in webview", e);
+      }
     }
 
     webview.addEventListener('dom-ready', handleDomReady)
     return () => {
-      webview.removeEventListener('dom-ready', handleDomReady)
+        try {
+            webview.removeEventListener('dom-ready', handleDomReady)
+        } catch (e) {}
     }
-  }, [credentials])
+  }, [credentials, isElectron])
+
+  if (!isElectron) {
+    return (
+        <div className="h-[calc(100vh-8rem)] w-full flex flex-col items-center justify-center space-y-4">
+            <h1 className="text-2xl font-bold">Lexware Dashboard</h1>
+            <p className="text-gray-600">Integrated view is only available in the Desktop App.</p>
+            <button 
+                onClick={() => window.open("https://app.lexware.de/dash", "_blank")}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+            >
+                Open in Browser
+            </button>
+        </div>
+    )
+  }
 
   return (
     <div className="h-[calc(100vh-8rem)] w-full flex flex-col">

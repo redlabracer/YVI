@@ -4,6 +4,7 @@ import {
   Moon, Sun, Key, Database, Save, RefreshCw, ShieldCheck, 
   CheckCircle2, AlertCircle, Loader2, BrainCircuit
 } from 'lucide-react'
+import { api } from '../api'
 
 export default function Settings() {
   const { theme, toggleTheme } = useTheme()
@@ -18,22 +19,28 @@ export default function Settings() {
   const [status, setStatus] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // @ts-ignore
+  const isElectron = window.electron !== undefined
+
   useEffect(() => {
     loadSettings()
   }, [])
 
   const loadSettings = async () => {
-    // @ts-ignore
-    const settings = await window.electron.ipcRenderer.invoke('get-settings')
-    if (settings) {
-      if (settings.apiKey) setApiKey(settings.apiKey)
-      if (settings.openaiKey) setOpenaiKey(settings.openaiKey)
-      if (settings.carPartsUser) setCarPartsUser(settings.carPartsUser)
-      if (settings.carPartsPass) setCarPartsPass(settings.carPartsPass)
-      if (settings.lexwareUser) setLexwareUser(settings.lexwareUser)
-      if (settings.lexwarePass) setLexwarePass(settings.lexwarePass)
-      if (settings.autoSync) setAutoSync(settings.autoSync)
-      if (settings.lastSync) setLastSync(new Date(settings.lastSync).toLocaleString())
+    try {
+        const settings = await api.settings.get()
+        if (settings) {
+          if (settings.apiKey) setApiKey(settings.apiKey)
+          if (settings.openaiKey) setOpenaiKey(settings.openaiKey)
+          if (settings.carPartsUser) setCarPartsUser(settings.carPartsUser)
+          if (settings.carPartsPass) setCarPartsPass(settings.carPartsPass)
+          if (settings.lexwareUser) setLexwareUser(settings.lexwareUser)
+          if (settings.lexwarePass) setLexwarePass(settings.lexwarePass)
+          if (settings.autoSync) setAutoSync(settings.autoSync)
+          if (settings.lastSync) setLastSync(new Date(settings.lastSync).toLocaleString())
+        }
+    } catch(err) {
+        console.error(err)
     }
   }
 
@@ -46,8 +53,7 @@ export default function Settings() {
 
   const handleSave = async () => {
     try {
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('save-settings', { apiKey, openaiKey, carPartsUser, carPartsPass, lexwareUser, lexwarePass, autoSync })
+      await api.settings.save({ apiKey, openaiKey, carPartsUser, carPartsPass, lexwareUser, lexwarePass, autoSync })
       showStatus('success', 'Einstellungen erfolgreich gespeichert!')
     } catch (err) {
       console.error(err)
@@ -56,12 +62,15 @@ export default function Settings() {
   }
 
   const handleTestSync = async () => {
+    if(!isElectron) {
+        showStatus('error', 'Sync ist nur am Desktop verfügbar')
+        return
+    }
     setLoading(true)
     showStatus('info', 'Verbinde zu Lexware...')
     try {
       // First save the key to ensure backend has latest
-      // @ts-ignore
-      await window.electron.ipcRenderer.invoke('save-settings', { apiKey })
+      await api.settings.save({ apiKey })
       
       // Then sync
       // @ts-ignore
@@ -76,6 +85,10 @@ export default function Settings() {
   }
 
   const handleBackup = async () => {
+    if(!isElectron) {
+         showStatus('error', 'Backup Download über Server noch nicht implementiert')
+         return
+    }
     try {
       // @ts-ignore
       const result = await window.electron.ipcRenderer.invoke('create-backup')

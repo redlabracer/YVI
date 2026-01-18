@@ -17,49 +17,9 @@ import documentRoutes from './routes/document.routes'
 const app = express()
 const PORT = process.env.PORT || 3000
 
-// Frontend-Pfad für statische Dateien
-const frontendPath = join(__dirname, '../../out/renderer')
-
 // Middleware
 app.use(cors()) // Erlaubt Zugriff von anderen Geräten (Handy, PC)
 app.use(express.json())
-
-// --- PWA Dateien OHNE Auth (müssen öffentlich sein für Installation) ---
-// Service Worker muss ohne Auth erreichbar sein
-app.get('/sw.js', (_req, res) => {
-  const swPath = join(frontendPath, 'sw.js')
-  res.setHeader('Content-Type', 'application/javascript')
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-  res.setHeader('Service-Worker-Allowed', '/')
-  res.sendFile(swPath, (err) => {
-    if (err) {
-      console.log('SW not found, skipping:', err.message)
-      res.status(404).send('// Service Worker not available')
-    }
-  })
-})
-
-// Manifest muss ohne Auth erreichbar sein
-app.get('/manifest.json', (_req, res) => {
-  const manifestPath = join(frontendPath, 'manifest.json')
-  res.setHeader('Content-Type', 'application/manifest+json')
-  res.sendFile(manifestPath, (err) => {
-    if (err) {
-      console.log('Manifest not found, sending default')
-      res.json({
-        name: 'KFZ Werkstatt',
-        short_name: 'Werkstatt',
-        start_url: '/',
-        display: 'standalone',
-        theme_color: '#2563eb'
-      })
-    }
-  })
-})
-
-// Icons ohne Auth
-app.use('/icons', express.static(join(frontendPath, 'icons')))
-// -----------------------------------------------------------------
 
 // --- SICHERHEIT: Passwortschutz (Basic Auth) ---
 // Damit niemand Fremdes auf Ihre Daten zugreifen kann
@@ -117,6 +77,7 @@ app.use('/api/documents', documentRoutes)
 
 // Frontend ausliefern (Die App selbst)
 // Wir gehen davon aus, dass der 'out/renderer' Ordner existiert (durch npm run build)
+const frontendPath = join(__dirname, '../../out/renderer')
 app.use(express.static(frontendPath))
 
 // Alle anderen Anfragen an das Frontend weiterleiten (für React Router)

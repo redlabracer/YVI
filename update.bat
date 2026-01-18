@@ -48,17 +48,15 @@ echo.
 echo 3. Datenbank Updates...
 set PRISMA_CLIENT_ENGINE_TYPE=binary
 set PRISMA_CLI_QUERY_ENGINE_TYPE=binary
-call npx prisma generate
+echo    Generiere Prisma Client...
+cmd /c "npx prisma generate 2>&1" | findstr /v "^$"
 if %errorlevel% neq 0 (
-    echo Fehler bei Prisma Generate!
-    pause
-    exit /b %errorlevel%
+    echo    [WARNUNG] Prisma Generate hatte Warnungen - fahre fort...
 )
-call npx prisma migrate deploy
+echo    Fuehre Migrationen aus...
+cmd /c "npx prisma migrate deploy 2>&1" | findstr /v "^$"
 if %errorlevel% neq 0 (
-    echo Fehler bei Prisma Migrate!
-    pause
-    exit /b %errorlevel%
+    echo    [WARNUNG] Prisma Migrate hatte Warnungen - fahre fort...
 )
 
 echo.

@@ -1,6 +1,6 @@
 {
   "name": "kfz-werkstatt-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "KFZ Werkstatt Management Software",
   "main": "./out/main/index.js",
   "author": "GitHub Copilot",

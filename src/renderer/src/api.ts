@@ -216,6 +216,30 @@ export const api = {
         } else {
             return await request('templates');
         }
+    },
+    create: async (data: { title: string; description: string }) => {
+        if (isElectron) {
+            // @ts-ignore
+            return await window.electron.ipcRenderer.invoke('create-service-template', data);
+        } else {
+            return await request('templates', 'POST', data);
+        }
+    },
+    update: async (data: { id: number; title?: string; description?: string }) => {
+        if (isElectron) {
+            // @ts-ignore
+            return await window.electron.ipcRenderer.invoke('update-service-template', data);
+        } else {
+            return await request(`templates/${data.id}`, 'PUT', data);
+        }
+    },
+    delete: async (id: number) => {
+        if (isElectron) {
+            // @ts-ignore
+            return await window.electron.ipcRenderer.invoke('delete-service-template', id);
+        } else {
+            return await request(`templates/${id}`, 'DELETE');
+        }
     }
   },
 

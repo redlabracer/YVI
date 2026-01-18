@@ -10,6 +10,7 @@ import settingsRoutes from './routes/settings.routes'
 import uploadRoutes from './routes/upload.routes'
 import tireRoutes from './routes/tire.routes'
 import todoRoutes from './routes/todo.routes'
+import shopRoutes from './routes/shop.routes'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -60,6 +61,7 @@ app.use('/api/settings', settingsRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/tires', tireRoutes)
 app.use('/api/todos', todoRoutes)
+app.use('/api/shop', shopRoutes)
 
 // Frontend ausliefern (Die App selbst)
 // Wir gehen davon aus, dass der 'out/renderer' Ordner existiert (durch npm run build)

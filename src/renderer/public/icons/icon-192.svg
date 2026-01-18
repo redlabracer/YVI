@@ -1,10 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="24" fill="#2563eb"/>
+  <!-- Background -->
+  <rect width="192" height="192" rx="32" fill="#2563eb"/>
+  
+  <!-- Car silhouette -->
   <g fill="white">
+    <!-- Car body -->
+    <path d="M40 100 L50 70 Q55 60 70 60 L122 60 Q137 60 142 70 L152 100 Q156 105 156 115 L156 130 Q156 135 151 135 L41 135 Q36 135 36 130 L36 115 Q36 105 40 100 Z"/>
+    
+    <!-- Windows -->
+    <path d="M55 75 L62 65 Q65 62 72 62 L120 62 Q127 62 130 65 L137 75 Q140 80 135 82 L57 82 Q52 80 55 75 Z" fill="#2563eb"/>
+    
+    <!-- Wheels -->
+    <circle cx="65" cy="130" r="18" fill="#1e40af"/>
+    <circle cx="65" cy="130" r="10" fill="white"/>
+    <circle cx="127" cy="130" r="18" fill="#1e40af"/>
+    <circle cx="127" cy="130" r="10" fill="white"/>
+    
     <!-- Wrench icon -->
-    <path d="M96 40c-30.9 0-56 25.1-56 56s25.1 56 56 56 56-25.1 56-56-25.1-56-56-56zm0 100c-24.3 0-44-19.7-44-44s19.7-44 44-44 44 19.7 44 44-19.7 44-44 44z"/>
-    <path d="M120 80l-12 12-8-8 12-12c-5.3-3.2-11.4-5-18-5-19.3 0-35 15.7-35 35 0 6.6 1.8 12.7 5 18l-12 12 8 8 12-12c5.3 3.2 11.4 5 18 5 19.3 0 35-15.7 35-35 0-6.6-1.8-12.7-5-18z"/>
-    <circle cx="96" cy="96" r="12"/>
+    <g transform="translate(75, 95) scale(0.5)">
+      <path d="M20 8 L8 20 L12 24 L24 12 L28 16 L44 0 L48 4 L32 20 L36 24 L24 36 L20 32 L4 48 L0 44 L16 28 L12 24 L0 36 L-4 32 L8 20 Z" fill="#fbbf24"/>
+    </g>
   </g>
-  <text x="96" y="160" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="20" font-weight="bold">KFZ</text>
+  
+  <!-- Text -->
+  <text x="96" y="175" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="22" font-weight="bold">WERKSTATT</text>
 </svg>

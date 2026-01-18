@@ -55,9 +55,5 @@ extraResources:
       - "**/*"
 
 # asar Archiv Einstellungen
-asar: true
-asarUnpack:
-  - "node_modules/.prisma/**/*"
-  - "node_modules/@prisma/client/**/*"
-  - "node_modules/@prisma/engines/**/*"
-  - "**/*.node"
+# Deaktiviert wegen Prisma-Kompatibilität - Prisma braucht direkten Dateizugriff
+asar: false

@@ -8,6 +8,19 @@ import { autoUpdater } from 'electron-updater'
 import { startMobileServer, stopMobileServer } from './mobile-server'
 import { logger, setupLoggerIPC } from './logger'
 
+// ===== PRISMA BINARY FÜR ELECTRON PRODUCTION =====
+// In production müssen wir den Pfad zur Query Engine setzen
+if (!is.dev) {
+  // Die Query Engine wird aus dem asar.unpacked Ordner geladen
+  const queryEnginePath = join(
+    app.getAppPath().replace('app.asar', 'app.asar.unpacked'),
+    'node_modules',
+    '.prisma',
+    'client'
+  )
+  process.env.PRISMA_QUERY_ENGINE_LIBRARY = join(queryEnginePath, 'query_engine-windows.dll.node')
+}
+
 // ===== AUTO-UPDATER KONFIGURATION =====
 autoUpdater.logger = logger
 autoUpdater.autoDownload = true

@@ -13,7 +13,6 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: build/icon.ico
   artifactName: ${productName}-Setup-${version}.${ext}
   # Code-Signing deaktivieren (für interne Apps nicht nötig)
   signAndEditExecutable: false
@@ -22,9 +21,6 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
-  installerHeaderIcon: build/icon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: YVI Werkstatt
@@ -63,3 +59,5 @@ asar: true
 asarUnpack:
   - "node_modules/.prisma/**/*"
   - "node_modules/@prisma/client/**/*"
+  - "node_modules/@prisma/engines/**/*"
+  - "**/*.node"

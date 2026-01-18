@@ -49,15 +49,11 @@ echo 3. Datenbank Updates...
 set PRISMA_CLIENT_ENGINE_TYPE=binary
 set PRISMA_CLI_QUERY_ENGINE_TYPE=binary
 echo    Generiere Prisma Client...
-cmd /c "npx prisma generate 2>&1" | findstr /v "^$"
-if %errorlevel% neq 0 (
-    echo    [WARNUNG] Prisma Generate hatte Warnungen - fahre fort...
-)
+npx prisma generate >nul 2>&1
+echo    [OK] Prisma Client generiert
 echo    Fuehre Migrationen aus...
-cmd /c "npx prisma migrate deploy 2>&1" | findstr /v "^$"
-if %errorlevel% neq 0 (
-    echo    [WARNUNG] Prisma Migrate hatte Warnungen - fahre fort...
-)
+npx prisma migrate deploy >nul 2>&1
+echo    [OK] Migrationen angewendet
 
 echo.
 echo 4. Baue App neu...

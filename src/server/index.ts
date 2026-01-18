@@ -24,8 +24,11 @@ const frontendPath = join(__dirname, '../../out/renderer')
 app.use(cors()) // Erlaubt Zugriff von anderen Geräten (Handy, PC)
 app.use(express.json())
 
-// --- PWA Dateien OHNE Auth (müssen öffentlich sein für Installation) ---
-// Service Worker muss ohne Auth erreichbar sein
+// --- STATISCHE DATEIEN OHNE AUTH (Frontend muss öffentlich sein) ---
+// Assets (JS, CSS) ohne Auth
+app.use('/assets', express.static(join(frontendPath, 'assets')))
+
+// PWA Dateien ohne Auth
 app.get('/sw.js', (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript')
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
@@ -33,7 +36,6 @@ app.get('/sw.js', (_req, res) => {
   res.sendFile(join(frontendPath, 'sw.js'))
 })
 
-// Manifest muss ohne Auth erreichbar sein
 app.get('/manifest.json', (_req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json')
   res.sendFile(join(frontendPath, 'manifest.json'))
@@ -41,13 +43,16 @@ app.get('/manifest.json', (_req, res) => {
 
 // Icons ohne Auth
 app.use('/icons', express.static(join(frontendPath, 'icons')))
+
+// index.html ohne Auth (die Seite selbst muss ladbar sein)
+app.get('/', (_req, res) => {
+  res.sendFile(join(frontendPath, 'index.html'))
+})
 // -----------------------------------------------------------------
 
-// --- SICHERHEIT: Passwortschutz (Basic Auth) ---
+// --- SICHERHEIT: Passwortschutz (Basic Auth) NUR FÜR API ---
 // Damit niemand Fremdes auf Ihre Daten zugreifen kann
-app.use((req, res, next) => {
-  // Standard-Zugangsdaten: Benutzer="admin", Passwort="123"
-  // BITTE ÄNDERN SIE DIESE DATEN VOR DEM EINSATZ IM INTERNET!
+app.use('/api', (req, res, next) => {
   const validUser = process.env.AUTH_USER || 'Terhaag'
   const validPass = process.env.AUTH_PASS || 'terhaag'
 

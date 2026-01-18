@@ -17,9 +17,31 @@ import documentRoutes from './routes/document.routes'
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Frontend-Pfad für statische Dateien
+const frontendPath = join(__dirname, '../../out/renderer')
+
 // Middleware
 app.use(cors()) // Erlaubt Zugriff von anderen Geräten (Handy, PC)
 app.use(express.json())
+
+// --- PWA Dateien OHNE Auth (müssen öffentlich sein für Installation) ---
+// Service Worker muss ohne Auth erreichbar sein
+app.get('/sw.js', (_req, res) => {
+  res.setHeader('Content-Type', 'application/javascript')
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  res.setHeader('Service-Worker-Allowed', '/')
+  res.sendFile(join(frontendPath, 'sw.js'))
+})
+
+// Manifest muss ohne Auth erreichbar sein
+app.get('/manifest.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json')
+  res.sendFile(join(frontendPath, 'manifest.json'))
+})
+
+// Icons ohne Auth
+app.use('/icons', express.static(join(frontendPath, 'icons')))
+// -----------------------------------------------------------------
 
 // --- SICHERHEIT: Passwortschutz (Basic Auth) ---
 // Damit niemand Fremdes auf Ihre Daten zugreifen kann
@@ -77,7 +99,6 @@ app.use('/api/documents', documentRoutes)
 
 // Frontend ausliefern (Die App selbst)
 // Wir gehen davon aus, dass der 'out/renderer' Ordner existiert (durch npm run build)
-const frontendPath = join(__dirname, '../../out/renderer')
 app.use(express.static(frontendPath))
 
 // Alle anderen Anfragen an das Frontend weiterleiten (für React Router)

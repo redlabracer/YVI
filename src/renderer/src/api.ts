@@ -24,7 +24,8 @@ console.log(`[API] Initialisiert. Modus: ${isElectron ? 'ELECTRON (Desktop)' : '
 // Hilfsfunktion für HTTP Requests (wenn wir im Web-Modus sind)
 const request = async (endpoint: string, method = 'GET', body?: any) => {
   // Wenn wir im Web-Browser sind, rufen wir die API relativ auf (z.B. /api/customers)
-  const serverUrl = localStorage.getItem('serverUrl');
+  const rawServerUrl = localStorage.getItem('serverUrl');
+  const serverUrl = rawServerUrl ? rawServerUrl.replace(/\/$/, '') : ''; // Remove trailing slash
   const url = serverUrl ? `${serverUrl}/api/${endpoint}` : `/api/${endpoint}`;
   
   // Basic Auth Header holen (wenn vorhanden) für den Serverzugriff

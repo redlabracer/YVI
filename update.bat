@@ -3,6 +3,7 @@ echo --- YVI Server Update System ---
 echo.
 
 echo 1. Hole Code von GitHub...
+git checkout package-lock.json
 git pull
 if %errorlevel% neq 0 (
     echo Fehler beim Git Pull!

@@ -49,11 +49,11 @@ echo 3. Datenbank Updates...
 set PRISMA_CLIENT_ENGINE_TYPE=binary
 set PRISMA_CLI_QUERY_ENGINE_TYPE=binary
 echo    Generiere Prisma Client...
-npx prisma generate >nul 2>&1
+node node_modules\prisma\build\index.js generate >nul 2>&1
 echo    [OK] Prisma Client generiert
 echo    Fuehre Migrationen aus...
-npx prisma migrate deploy >nul 2>&1
-echo    [OK] Migrationen angewendet
+node node_modules\prisma\build\index.js migrate deploy >nul 2>&1
+echo    [OK] Migrationen ausgefuehrt
 
 echo.
 echo 4. Baue App neu...

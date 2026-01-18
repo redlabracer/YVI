@@ -33,9 +33,7 @@ export const createCustomer = async (req: Request, res: Response) => {
         lastName,
         address,
         phone,
-        email,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        email
     }
 
     // Only add vehicle if at least some vehicle data is present
@@ -51,9 +49,7 @@ export const createCustomer = async (req: Request, res: Response) => {
                 firstRegistration: firstRegistration ? new Date(firstRegistration) : null,
                 mileage: mileage ? parseInt(mileage) : null,
                 fuelType,
-                transmission,
-                createdAt: new Date(),
-                updatedAt: new Date()
+                transmission
             }
         }
     }

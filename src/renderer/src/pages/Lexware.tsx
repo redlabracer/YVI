@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import api from '../api'
+import { api } from '../api'
 
 const Lexware = () => {
   const webviewRef = useRef<any>(null)

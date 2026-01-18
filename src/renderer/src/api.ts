@@ -9,18 +9,23 @@ export interface Customer {
   phone?: string;
   email?: string;
   vehicles?: any[];
+  tireStorageSpot?: string | null;
 }
 
 // Wir prüfen, ob wir im Electron-Umfeld laufen
 // @ts-ignore
-const isElectron = window.electron !== undefined;
+// Wenn "useRemote" true ist, tun wir so als wären wir im Web-Modus, damit wir die API Calls nutzen
+const useRemote = localStorage.getItem('useRemote') === 'true';
+// @ts-ignore
+const isElectron = window.electron !== undefined && !useRemote;
 
-console.log(`[API] Initialisiert. Modus: ${isElectron ? 'ELECTRON (Desktop)' : 'WEB (Server/Mobile)'}`);
+console.log(`[API] Initialisiert. Modus: ${isElectron ? 'ELECTRON (Desktop)' : 'WEB/REMOTE (Server/Mobile)'}`);
 
 // Hilfsfunktion für HTTP Requests (wenn wir im Web-Modus sind)
 const request = async (endpoint: string, method = 'GET', body?: any) => {
   // Wenn wir im Web-Browser sind, rufen wir die API relativ auf (z.B. /api/customers)
-  const url = `/api/${endpoint}`;
+  const serverUrl = localStorage.getItem('serverUrl');
+  const url = serverUrl ? `${serverUrl}/api/${endpoint}` : `/api/${endpoint}`;
   
   // Basic Auth Header holen (wenn vorhanden) für den Serverzugriff
   const headers: HeadersInit = {
@@ -47,6 +52,10 @@ const request = async (endpoint: string, method = 'GET', body?: any) => {
   }
 
   return response.json();
+};
+
+export const setServerUrl = (url: string) => {
+  localStorage.setItem('serverUrl', url);
 };
 
 export const api = {
@@ -80,7 +89,7 @@ export const api = {
       }
     },
 
-    update: async (data: Customer) => {
+    update: async (data: Partial<Customer> & { id: number }) => {
       if (isElectron) {
         // @ts-ignore
         return await window.electron.ipcRenderer.invoke('update-customer', data);

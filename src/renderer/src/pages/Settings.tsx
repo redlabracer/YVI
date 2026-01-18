@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { 
   Moon, Sun, Key, Database, Save, RefreshCw, ShieldCheck, 
-  CheckCircle2, AlertCircle, Loader2, BrainCircuit
+  CheckCircle2, AlertCircle, Loader2, BrainCircuit, Cloud
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -18,6 +18,10 @@ export default function Settings() {
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [status, setStatus] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Cloud / Remote Database State
+  const [useRemote, setUseRemote] = useState(localStorage.getItem('useRemote') === 'true')
+  const [serverUrl, setServerUrl] = useState(localStorage.getItem('serverUrl') || '')
 
   // @ts-ignore
   const isElectron = window.electron !== undefined
@@ -59,6 +63,12 @@ export default function Settings() {
       console.error(err)
       showStatus('error', 'Fehler beim Speichern der Einstellungen')
     }
+  }
+
+  const handleSaveRemote = () => {
+    localStorage.setItem('useRemote', String(useRemote))
+    localStorage.setItem('serverUrl', serverUrl)
+    window.location.reload()
   }
 
   const handleTestSync = async () => {
@@ -147,6 +157,59 @@ export default function Settings() {
                 className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-sm ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'}`}
               />
             </button>
+          </div>
+        </div>
+
+        {/* Cloud / Remote Database */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 rounded-lg">
+              <Cloud size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Cloud / Remote Database</h2>
+              <p className="text-gray-500 dark:text-gray-400 text-xs">Verbinden Sie sich mit einem Remote-Server statt der lokalen Datenbank.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+             <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  id="useRemote" 
+                  checked={useRemote} 
+                  onChange={(e) => setUseRemote(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 rounded focus:ring-indigo-500"
+                />
+                <label htmlFor="useRemote" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                  Remote-Server verwenden
+                </label>
+              </div>
+            </div>
+
+            {useRemote && (
+              <div>
+                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Server URL</label>
+                <input 
+                  type="text" 
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white"
+                  placeholder="http://..."
+                />
+              </div>
+            )}
+
+            <div className="pt-2">
+              <button 
+                onClick={handleSaveRemote}
+                className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 font-medium text-sm flex items-center gap-2 transition-all"
+              >
+                <Save size={16} />
+                Speichern & Neustarten
+              </button>
+            </div>
           </div>
         </div>
 

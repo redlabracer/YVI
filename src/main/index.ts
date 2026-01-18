@@ -1346,7 +1346,7 @@ function createWindow(): void {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self' http://localhost:* http://127.0.0.1:* http://192.168.0.*:* https://*.werkstatt-terhaag.uk https://app.werkstatt-terhaag.uk ws://localhost:* wss://localhost:*; img-src 'self' data: blob: http: https:; font-src 'self' data:;"]
+        'Content-Security-Policy': ["default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * 'self' ws: wss: http: https:; frame-src * 'self' https:; img-src * 'self' data: blob: http: https:; font-src * 'self' data:;"]
       }
     })
   })

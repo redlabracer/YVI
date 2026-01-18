@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="24" fill="#2563eb"/>
+  <g fill="white">
+    <!-- Wrench icon -->
+    <path d="M96 40c-30.9 0-56 25.1-56 56s25.1 56 56 56 56-25.1 56-56-25.1-56-56-56zm0 100c-24.3 0-44-19.7-44-44s19.7-44 44-44 44 19.7 44 44-19.7 44-44 44z"/>
+    <path d="M120 80l-12 12-8-8 12-12c-5.3-3.2-11.4-5-18-5-19.3 0-35 15.7-35 35 0 6.6 1.8 12.7 5 18l-12 12 8 8 12-12c5.3 3.2 11.4 5 18 5 19.3 0 35-15.7 35-35 0-6.6-1.8-12.7-5-18z"/>
+    <circle cx="96" cy="96" r="12"/>
+  </g>
+  <text x="96" y="160" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="20" font-weight="bold">KFZ</text>
+</svg>

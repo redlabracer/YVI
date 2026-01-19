@@ -378,12 +378,17 @@ export default function CreateCustomer() {
                     onChange={handleChange} 
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-white transition-all font-mono uppercase pr-10" 
                   />
-                  {formData.vin && (
+                  {formData.vin && isElectron && (
                     <button 
                       type="button"
                       onClick={() => {
-                        // @ts-ignore
-                        window.electron.ipcRenderer.send('open-carparts-cat', formData.vin)
+                        try {
+                          // @ts-ignore
+                          window.electron.ipcRenderer.send('open-carparts-cat', formData.vin)
+                        } catch (err) {
+                          console.error('Failed to open Carparts:', err)
+                          alert('Carparts-Katalog konnte nicht geöffnet werden')
+                        }
                       }}
                       className="absolute right-2 top-1/2 transform -translate-y-1/2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 p-1 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                       title="Teile suchen (Auto-Login & VIN Suche)"

@@ -81,9 +81,19 @@ ipcMain.on('open-external', (_, url) => {
 })
 
 ipcMain.on('open-carparts-cat', async (_, query) => {
-  const settings = await prisma.settings.findFirst()
-  const username = settings?.carPartsUser || ''
-  const password = settings?.carPartsPass || ''
+  console.log('IPC: open-carparts-cat called with query:', query)
+  
+  let username = ''
+  let password = ''
+  
+  try {
+    const settings = await prisma.settings.findFirst()
+    username = settings?.carPartsUser || ''
+    password = settings?.carPartsPass || ''
+    console.log('CarParts credentials loaded:', username ? 'username set' : 'no username')
+  } catch (err) {
+    console.error('Error loading settings for CarParts:', err)
+  }
 
   const win = new BrowserWindow({
     width: 1280,

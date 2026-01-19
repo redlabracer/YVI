@@ -1288,6 +1288,10 @@ ipcMain.handle('sync-lexware', async () => {
     let hasMoreInvoices = true
     let allVouchers: any[] = []
 
+    // Wait before starting invoice sync to avoid rate limiting
+    console.log('Warte 2 Sekunden vor Rechnungs-Sync (Rate Limiting)...')
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
     console.log('Starte Rechnungs-Sync...')
     
     while (hasMoreInvoices) {

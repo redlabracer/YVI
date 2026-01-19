@@ -38,6 +38,15 @@ export const createCustomer = async (req: Request, res: Response) => {
 
     // Only add vehicle if at least some vehicle data is present
     if (licensePlate || vin || make || model) {
+        // Parse firstRegistration safely
+        let parsedDate: Date | null = null
+        if (firstRegistration) {
+            const date = new Date(firstRegistration)
+            if (!isNaN(date.getTime())) {
+                parsedDate = date
+            }
+        }
+        
         createData.vehicles = {
             create: {
                 licensePlate,
@@ -46,7 +55,7 @@ export const createCustomer = async (req: Request, res: Response) => {
                 model,
                 hsn,
                 tsn,
-                firstRegistration: firstRegistration ? new Date(firstRegistration) : null,
+                firstRegistration: parsedDate,
                 mileage: mileage ? parseInt(mileage) : null,
                 fuelType,
                 transmission
@@ -160,19 +169,17 @@ export const checkDuplicate = async (req: Request, res: Response) => {
       conditions.push({ phone: { contains: phone.replace(/\s/g, '') } })
     }
     
-    // Check by email
+    // Check by email (use lowercase comparison for SQLite)
     if (email && email.length > 3) {
-      conditions.push({ email: { equals: email, mode: 'insensitive' } })
+      conditions.push({ email: { equals: email.toLowerCase() } })
     }
     
-    // Check by license plate (via vehicle)
+    // Check by license plate (via vehicle) - use uppercase for comparison
     if (licensePlate && licensePlate.length > 2) {
+      const normalizedPlate = licensePlate.replace(/\s/g, '').toUpperCase()
       const vehicleMatch = await prisma.vehicle.findFirst({
         where: { 
-          licensePlate: { 
-            equals: licensePlate.replace(/\s/g, '').toUpperCase(),
-            mode: 'insensitive'
-          }
+          licensePlate: normalizedPlate
         },
         include: { customer: true }
       })

@@ -243,6 +243,10 @@ export const syncLexware = async (req: Request, res: Response) => {
     })
 
     // 4. Sync Invoices from Lexware and download PDFs
+    // Wait before starting invoice sync to avoid rate limiting
+    console.log('Warte 2 Sekunden vor Rechnungs-Sync (Rate Limiting)...')
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
     let allVouchers: any[] = []
     let invoicePage = 0
     let hasMoreInvoices = true

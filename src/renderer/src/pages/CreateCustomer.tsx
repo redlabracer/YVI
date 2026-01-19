@@ -637,7 +637,7 @@ export default function CreateCustomer() {
               </div>
               
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Es wurden ähnliche Kunden in der Datenbank gefunden. Möchten Sie diesen Kunden trotzdem erstellen?
+                Es wurden ähnliche Kunden in der Datenbank gefunden. Was möchten Sie tun?
               </p>
 
               <div className="space-y-3 mb-6 max-h-60 overflow-auto">
@@ -671,13 +671,60 @@ export default function CreateCustomer() {
                         {match.matchReason}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/customer/${match.id}`)}
-                      className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      Zum Kunden →
-                    </button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/customer/${match.id}`)}
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Zum Kunden →
+                      </button>
+                      {formData.licensePlate && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              // Add vehicle to existing customer
+                              await api.vehicles.create({
+                                customerId: match.id,
+                                licensePlate: formData.licensePlate,
+                                make: formData.make,
+                                model: formData.model,
+                                vin: formData.vin,
+                                hsn: formData.hsn,
+                                tsn: formData.tsn,
+                                firstRegistration: formData.firstRegistration,
+                                mileage: formData.mileage ? parseInt(formData.mileage) : null,
+                                fuelType: formData.fuelType,
+                                transmission: formData.transmission
+                              })
+                              
+                              // Upload documents if any
+                              if (selectedFiles.length > 0) {
+                                const filePaths = isElectron 
+                                  ? selectedFiles.map(f => f.path)
+                                  : await Promise.all(selectedFiles.filter(f => f.file).map(async f => {
+                                      return await api.files.upload(f.file!)
+                                    }))
+                                
+                                if (filePaths.length > 0) {
+                                  await api.documents.addToCustomer(match.id, isElectron ? filePaths : filePaths.filter(Boolean))
+                                }
+                              }
+                              
+                              setShowDuplicateModal(false)
+                              navigate(`/customer/${match.id}`)
+                            } catch (err) {
+                              console.error('Error adding vehicle:', err)
+                              alert('Fehler beim Hinzufügen des Fahrzeugs')
+                            }
+                          }}
+                          className="text-sm px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+                        >
+                          + Fahrzeug hinzufügen
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

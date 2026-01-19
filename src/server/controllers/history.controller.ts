@@ -42,6 +42,8 @@ export const updateHistoryEntry = async (req: Request, res: Response) => {
     delete data.customerId
     delete data.createdAt
     delete data.updatedAt
+    delete data.filePaths  // Not a DB field, handled separately
+    delete data.documents  // Relation, not directly updatable
     
     if (data.date) {
         data.date = new Date(data.date)

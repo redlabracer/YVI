@@ -138,11 +138,36 @@ export const updateCustomer = async (req: Request, res: Response) => {
 export const deleteCustomer = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
+    const customerId = parseInt(id)
+    
+    // Delete related records first to avoid foreign key constraint errors
+    // Delete documents
+    await prisma.document.deleteMany({
+      where: { customerId }
+    })
+    
+    // Delete service records (history)
+    await prisma.serviceRecord.deleteMany({
+      where: { customerId }
+    })
+    
+    // Delete appointments
+    await prisma.appointment.deleteMany({
+      where: { customerId }
+    })
+    
+    // Delete vehicles
+    await prisma.vehicle.deleteMany({
+      where: { customerId }
+    })
+    
+    // Now delete the customer
     await prisma.customer.delete({
-      where: { id: parseInt(id) }
+      where: { id: customerId }
     })
     res.json({ success: true })
   } catch (error) {
+    console.error('Error deleting customer:', error)
     res.status(500).json({ error: 'Fehler beim Löschen' })
   }
 }

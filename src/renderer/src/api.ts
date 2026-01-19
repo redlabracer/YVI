@@ -410,16 +410,25 @@ export const api = {
   // --- DOKUMENTE (Documents) ---
   documents: {
       // Analyze registration document with AI
-      analyze: async (file: File, extractCustomerData: boolean = false) => {
+      analyze: async (fileOrPath: File | string, extractCustomerData: boolean = false) => {
           if (isElectron) {
-              // @ts-ignore - In Electron, use IPC with file path
+              // In Electron, use IPC with file path
+              // If it's a string, use it directly; if it's a File, try to get path
+              const filePath = typeof fileOrPath === 'string' 
+                  ? fileOrPath 
+                  : (fileOrPath as any).path || fileOrPath.name
+              // @ts-ignore
               return await window.electron.ipcRenderer.invoke('analyze-registration-doc', { 
-                  filePath: (file as any).path, 
+                  filePath, 
                   extractCustomerData 
               });
           } else {
+              // Web mode requires File object
+              if (typeof fileOrPath === 'string') {
+                  throw new Error('File path not supported in web mode')
+              }
               const formData = new FormData();
-              formData.append('file', file);
+              formData.append('file', fileOrPath);
               formData.append('extractCustomerData', String(extractCustomerData));
               
               const rawServerUrl = localStorage.getItem('serverUrl');

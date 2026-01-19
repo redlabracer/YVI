@@ -12,6 +12,7 @@ const STORAGE_KEY = 'bulk-import-state'
 interface FileEntry {
   id: string
   file?: File // Optional because we can't serialize File objects
+  filePath?: string // Electron file path
   fileData?: string // Base64 encoded file data for persistence
   name: string
   status: 'pending' | 'analyzing' | 'success' | 'error'
@@ -71,6 +72,9 @@ export default function BulkImport() {
   const [autoCreate, setAutoCreate] = useState(false)
   const [apiKeyMissing, setApiKeyMissing] = useState(false)
   const [isCancelled, setIsCancelled] = useState(false)
+  
+  // @ts-ignore
+  const isElectron = window.electron && typeof window.electron === 'object'
 
   // Load persisted state on mount
   useEffect(() => {
@@ -126,7 +130,31 @@ export default function BulkImport() {
   const errorCount = files.filter(f => f.status === 'error').length
   const pendingCount = files.filter(f => f.status === 'pending').length
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // For Electron, use native file dialog to get actual file paths
+    if (isElectron) {
+      try {
+        // @ts-ignore
+        const filePaths = await window.electron.ipcRenderer.invoke('select-file')
+        if (filePaths && filePaths.length > 0) {
+          const newEntries: FileEntry[] = filePaths.map((filePath: string, i: number) => {
+            const name = filePath.split('\\').pop() || filePath.split('/').pop() || 'file'
+            return {
+              id: `${Date.now()}-${i}`,
+              filePath,
+              name,
+              status: 'pending' as const
+            }
+          })
+          setFiles(prev => [...prev, ...newEntries])
+        }
+      } catch (err) {
+        console.error('Error selecting files:', err)
+      }
+      return
+    }
+    
+    // Web mode: use file input
     const selectedFiles = e.target.files
     if (!selectedFiles || selectedFiles.length === 0) return
 
@@ -156,8 +184,8 @@ export default function BulkImport() {
 
   const analyzeFile = async (entry: FileEntry): Promise<FileEntry> => {
     try {
-      // Check if file exists
-      if (!entry.file) {
+      // Check if file exists (File object for web, filePath for Electron)
+      if (!entry.file && !entry.filePath) {
         return {
           ...entry,
           status: 'error',
@@ -166,7 +194,9 @@ export default function BulkImport() {
       }
       
       // Analyze with customer data extraction enabled
-      const result = await api.documents.analyze(entry.file, true)
+      // For Electron, pass the file path; for web, pass the File object
+      const analyzeSource = entry.filePath || entry.file!
+      const result = await api.documents.analyze(analyzeSource, true)
       
       return {
         ...entry,
@@ -199,20 +229,16 @@ export default function BulkImport() {
     }
 
     try {
-      // First, upload the file if we have it (for web mode)
-      let uploadedFilePath: string | null = null
+      let filePaths: string[] = []
       
-      // @ts-ignore
-      const isElectron = window.electron && typeof window.electron === 'object'
-      
-      if (isElectron && entry.name) {
-        // In Electron, we might have the original file path
-        // The file was already analyzed, so we need to get the path from somewhere
-        // For now, we'll use the IPC handler which handles files properly
+      if (isElectron && entry.filePath) {
+        // Electron mode: use the original file path directly
+        filePaths = [entry.filePath]
       } else if (entry.file) {
         // Web mode: upload the file first
         try {
-          uploadedFilePath = await api.files.upload(entry.file)
+          const uploadedPath = await api.files.upload(entry.file)
+          if (uploadedPath) filePaths = [uploadedPath]
         } catch (uploadErr) {
           console.error('Error uploading file:', uploadErr)
         }
@@ -222,7 +248,8 @@ export default function BulkImport() {
           const response = await fetch(entry.fileData)
           const blob = await response.blob()
           const file = new File([blob], entry.name, { type: blob.type })
-          uploadedFilePath = await api.files.upload(file)
+          const uploadedPath = await api.files.upload(file)
+          if (uploadedPath) filePaths = [uploadedPath]
         } catch (uploadErr) {
           console.error('Error uploading persisted file:', uploadErr)
         }
@@ -242,7 +269,7 @@ export default function BulkImport() {
         tsn: entry.result.tsn || '',
         firstRegistration: entry.result.firstRegistration || '',
         // Document (Fahrzeugschein)
-        filePaths: uploadedFilePath ? [uploadedFilePath] : []
+        filePaths: filePaths
       })
 
       return customer.id
@@ -278,9 +305,15 @@ export default function BulkImport() {
       setFiles(prev => prev.map(f => 
         f.id === entry.id ? { ...f, status: 'analyzing' } : f
       ))
+      
+      // Small delay to allow UI to update and prevent white screen
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       // Analyze the file
       const analyzedEntry = await analyzeFile(entry)
+      
+      // Another small delay after analysis
+      await new Promise(resolve => setTimeout(resolve, 50))
       
       // Check for API key error
       if (analyzedEntry.status === 'error' && 

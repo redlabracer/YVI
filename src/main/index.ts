@@ -564,10 +564,11 @@ ipcMain.handle('update-history-entry', async (_, data) => {
 })
 
 ipcMain.handle('delete-customer', async (_, id) => {
-  // Delete related records first
-  await prisma.vehicle.deleteMany({ where: { customerId: id } })
+  // Delete related records first to avoid foreign key constraint errors
   await prisma.document.deleteMany({ where: { customerId: id } })
   await prisma.serviceRecord.deleteMany({ where: { customerId: id } })
+  await prisma.appointment.deleteMany({ where: { customerId: id } })
+  await prisma.vehicle.deleteMany({ where: { customerId: id } })
   
   return await prisma.customer.delete({
     where: { id }

@@ -256,6 +256,99 @@ ipcMain.handle('select-file', async () => {
   return result.filePaths
 })
 
+// Check for duplicate customers before creating
+ipcMain.handle('check-customer-duplicate', async (_, data) => {
+  const { firstName, lastName, phone, email, licensePlate } = data
+  
+  const conditions: any[] = []
+  
+  // Check by name (both first and last name must match)
+  if (firstName && lastName) {
+    conditions.push({
+      AND: [
+        { firstName: { equals: firstName, mode: 'insensitive' } },
+        { lastName: { equals: lastName, mode: 'insensitive' } }
+      ]
+    })
+  }
+  
+  // Check by phone
+  if (phone && phone.length > 5) {
+    conditions.push({ phone: { contains: phone.replace(/\s/g, '') } })
+  }
+  
+  // Check by email
+  if (email && email.length > 3) {
+    conditions.push({ email: { equals: email, mode: 'insensitive' } })
+  }
+  
+  // Check by license plate (via vehicle)
+  if (licensePlate && licensePlate.length > 2) {
+    const cleanPlate = licensePlate.replace(/\s/g, '').toUpperCase()
+    const vehicleMatch = await prisma.vehicle.findFirst({
+      where: { 
+        licensePlate: cleanPlate
+      },
+      include: { customer: true }
+    })
+    
+    // @ts-ignore - customer is included via relation
+    if (vehicleMatch && vehicleMatch.customer) {
+      // @ts-ignore
+      const customer = vehicleMatch.customer
+      return {
+        isDuplicate: true,
+        matches: [{
+          id: customer.id,
+          firstName: customer.firstName,
+          lastName: customer.lastName,
+          phone: customer.phone,
+          matchReason: 'Kennzeichen'
+        }]
+      }
+    }
+  }
+  
+  if (conditions.length === 0) {
+    return { isDuplicate: false, matches: [] }
+  }
+  
+  const duplicates = await prisma.customer.findMany({
+    where: { OR: conditions },
+    take: 5,
+    include: { vehicles: true }
+  })
+  
+  if (duplicates.length > 0) {
+    const matches = duplicates.map(d => {
+      let matchReason = ''
+      if (firstName && lastName && 
+          d.firstName?.toLowerCase() === firstName.toLowerCase() && 
+          d.lastName?.toLowerCase() === lastName.toLowerCase()) {
+        matchReason = 'Name'
+      } else if (phone && d.phone?.includes(phone.replace(/\s/g, ''))) {
+        matchReason = 'Telefon'
+      } else if (email && d.email?.toLowerCase() === email.toLowerCase()) {
+        matchReason = 'E-Mail'
+      }
+      
+      return {
+        id: d.id,
+        firstName: d.firstName,
+        lastName: d.lastName,
+        phone: d.phone,
+        address: d.address,
+        vehicles: d.vehicles?.map(v => v.licensePlate).filter(Boolean),
+        matchReason
+      }
+    })
+    
+    return { isDuplicate: true, matches }
+  }
+  
+  return { isDuplicate: false, matches: [] }
+})
+
 ipcMain.handle('create-customer', async (_, data) => {
   const { firstName, lastName, address, phone, licensePlate, vin, make, model, hsn, tsn, firstRegistration, mileage, fuelType, transmission, filePaths } = data
   

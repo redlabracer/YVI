@@ -3,9 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { 
   User, MapPin, Phone, Car, FileText, Upload, Smartphone, 
-  X, Save, ArrowLeft, ScanLine, Trash2, Loader2, ExternalLink
+  X, Save, ArrowLeft, ScanLine, Trash2, Loader2, ExternalLink, AlertTriangle
 } from 'lucide-react'
 import { api } from '../api'
+
+interface DuplicateMatch {
+  id: number
+  firstName: string
+  lastName: string
+  phone?: string
+  address?: string
+  vehicles?: string[]
+  matchReason: string
+}
 
 export default function CreateCustomer() {
   const navigate = useNavigate()
@@ -31,6 +41,9 @@ export default function CreateCustomer() {
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [tunnelPassword, setTunnelPassword] = useState('')
   const [extractCustomerData, setExtractCustomerData] = useState(false)
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([])
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false)
 
   // @ts-ignore
   const isElectron = window.electron !== undefined
@@ -157,6 +170,34 @@ export default function CreateCustomer() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Check for duplicates first
+    if (!showDuplicateModal) {
+      setIsCheckingDuplicate(true)
+      try {
+        const duplicateCheck = await api.customers.checkDuplicate({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone,
+          licensePlate: formData.licensePlate
+        })
+        
+        if (duplicateCheck.isDuplicate && duplicateCheck.matches.length > 0) {
+          setDuplicateMatches(duplicateCheck.matches)
+          setShowDuplicateModal(true)
+          setIsCheckingDuplicate(false)
+          return
+        }
+      } catch (err) {
+        console.error('Duplicate check failed:', err)
+        // Continue with creation if check fails
+      }
+      setIsCheckingDuplicate(false)
+    }
+    
+    // Close modal and proceed with creation
+    setShowDuplicateModal(false)
+    
     try {
         // Für Web-Modus: Lade zuerst die Dateien hoch
         let filePaths: string[] = []
@@ -173,6 +214,33 @@ export default function CreateCustomer() {
         await api.customers.create({
             ...formData,
             // @ts-ignore - The API will filter this or server will ignore it for now
+            filePaths
+        })
+        alert('Kunde angelegt!')
+        navigate('/customers') 
+    } catch (err) {
+        console.error(err)
+        alert('Fehler beim Anlegen')
+    }
+  }
+
+  const handleForceCreate = async () => {
+    setShowDuplicateModal(false)
+    // Call handleSubmit again but skip duplicate check
+    try {
+        let filePaths: string[] = []
+        if (isElectron) {
+            filePaths = selectedFiles.map(f => f.path)
+        } else if (selectedFiles.some(f => f.file)) {
+            const uploadPromises = selectedFiles
+              .filter(f => f.file)
+              .map(f => api.files.upload(f.file!))
+            filePaths = await Promise.all(uploadPromises)
+        }
+        
+        await api.customers.create({
+            ...formData,
+            // @ts-ignore
             filePaths
         })
         alert('Kunde angelegt!')
@@ -208,9 +276,14 @@ export default function CreateCustomer() {
           </button>
           <button 
             onClick={handleSubmit}
-            className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm shadow-lg shadow-blue-200 dark:shadow-none flex items-center gap-2"
+            disabled={isCheckingDuplicate}
+            className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm shadow-lg shadow-blue-200 dark:shadow-none flex items-center gap-2 disabled:opacity-50"
           >
-            <Save size={16} /> Speichern
+            {isCheckingDuplicate ? (
+              <><Loader2 size={16} className="animate-spin" /> Prüfe...</>
+            ) : (
+              <><Save size={16} /> Speichern</>
+            )}
           </button>
         </div>
       </div>
@@ -542,6 +615,83 @@ export default function CreateCustomer() {
             >
               Schließen
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Warning Modal */}
+      {showDuplicateModal && (
+        <div className="fixed inset-0 bg-gray-900/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-full">
+                  <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Mögliches Duplikat</h3>
+              </div>
+              
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Es wurden ähnliche Kunden in der Datenbank gefunden. Möchten Sie diesen Kunden trotzdem erstellen?
+              </p>
+
+              <div className="space-y-3 mb-6 max-h-60 overflow-auto">
+                {duplicateMatches.map((match) => (
+                  <div 
+                    key={match.id}
+                    className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {match.firstName} {match.lastName}
+                        </div>
+                        {match.phone && (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            📞 {match.phone}
+                          </div>
+                        )}
+                        {match.address && (
+                          <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-[250px]">
+                            📍 {match.address}
+                          </div>
+                        )}
+                        {match.vehicles && match.vehicles.length > 0 && (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            🚗 {match.vehicles.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium rounded-full">
+                        {match.matchReason}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/customer/${match.id}`)}
+                      className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Zum Kunden →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
+              <button 
+                onClick={() => setShowDuplicateModal(false)}
+                className="flex-1 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-medium text-sm"
+              >
+                Abbrechen
+              </button>
+              <button 
+                onClick={handleForceCreate}
+                className="flex-1 py-2.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors font-medium text-sm"
+              >
+                Trotzdem erstellen
+              </button>
+            </div>
           </div>
         </div>
       )}

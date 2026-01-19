@@ -81,6 +81,16 @@ export const api = {
       }
     },
 
+    // Check for duplicate customers
+    checkDuplicate: async (data: { firstName?: string; lastName?: string; phone?: string; email?: string; licensePlate?: string }) => {
+      if (isElectron) {
+        // @ts-ignore
+        return await window.electron.ipcRenderer.invoke('check-customer-duplicate', data);
+      } else {
+        return await request('customers/check-duplicate', 'POST', data);
+      }
+    },
+
     create: async (data: Customer) => {
       if (isElectron) {
         // @ts-ignore

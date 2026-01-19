@@ -73,8 +73,10 @@ export default function BulkImport() {
   const [apiKeyMissing, setApiKeyMissing] = useState(false)
   const [isCancelled, setIsCancelled] = useState(false)
   
+  // @ts-ignore - Prüfe ob wir im Electron-Modus sind (und nicht Remote-Modus benutzen)
+  const useRemote = localStorage.getItem('useRemote') === 'true'
   // @ts-ignore
-  const isElectron = window.electron && typeof window.electron === 'object'
+  const isElectron = window.electron && typeof window.electron === 'object' && !useRemote
 
   // Load persisted state on mount
   useEffect(() => {
@@ -130,27 +132,33 @@ export default function BulkImport() {
   const errorCount = files.filter(f => f.status === 'error').length
   const pendingCount = files.filter(f => f.status === 'pending').length
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // For Electron, use native file dialog to get actual file paths
-    if (isElectron) {
-      try {
-        // @ts-ignore
-        const filePaths = await window.electron.ipcRenderer.invoke('select-file')
-        if (filePaths && filePaths.length > 0) {
-          const newEntries: FileEntry[] = filePaths.map((filePath: string, i: number) => {
-            const name = filePath.split('\\').pop() || filePath.split('/').pop() || 'file'
-            return {
-              id: `${Date.now()}-${i}`,
-              filePath,
-              name,
-              status: 'pending' as const
-            }
-          })
-          setFiles(prev => [...prev, ...newEntries])
-        }
-      } catch (err) {
-        console.error('Error selecting files:', err)
+  // Separate handler for Electron native file dialog
+  const handleElectronFileSelect = async () => {
+    try {
+      // @ts-ignore
+      const filePaths = await window.electron.ipcRenderer.invoke('select-file')
+      if (filePaths && filePaths.length > 0) {
+        const newEntries: FileEntry[] = filePaths.map((filePath: string, i: number) => {
+          const name = filePath.split('\\').pop() || filePath.split('/').pop() || 'file'
+          return {
+            id: `${Date.now()}-${i}`,
+            filePath,
+            name,
+            status: 'pending' as const
+          }
+        })
+        setFiles(prev => [...prev, ...newEntries])
       }
+    } catch (err) {
+      console.error('Error selecting files:', err)
+    }
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // This handler is only for web mode - the HTML file input onChange
+    // In Electron mode, we use handleElectronFileSelect directly
+    if (isElectron) {
+      // Don't process - Electron uses its own dialog via handleElectronFileSelect
       return
     }
     
@@ -440,7 +448,7 @@ export default function BulkImport() {
               className="hidden"
             />
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => isElectron ? handleElectronFileSelect() : fileInputRef.current?.click()}
               disabled={isProcessing}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
             >

@@ -260,6 +260,14 @@ export const api = {
         } else {
             return await request('settings', 'POST', data);
         }
+    },
+    syncLexware: async () => {
+        if (isElectron) {
+            // @ts-ignore
+            return await window.electron.ipcRenderer.invoke('sync-lexware');
+        } else {
+            return await request('settings/sync-lexware', 'POST');
+        }
     }
   },
 

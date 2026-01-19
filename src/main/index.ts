@@ -1311,6 +1311,116 @@ ipcMain.handle('sync-lexware', async () => {
             }
     }
 
+    // === BIDIRECTIONAL SYNC: Export local customers to Lexware ===
+    let exportedCount = 0
+    console.log('Starte Export lokaler Kunden zu Lexware...')
+    
+    // Find all customers without lexwareId (not yet synced to Lexware)
+    const localOnlyCustomers = await prisma.customer.findMany({
+      where: { lexwareId: null }
+    })
+    
+    console.log(`${localOnlyCustomers.length} lokale Kunden ohne Lexware-ID gefunden`)
+    
+    for (const customer of localOnlyCustomers) {
+      // Skip customers without last name (invalid data)
+      if (!customer.lastName || customer.lastName === '(Firma)') {
+        continue
+      }
+      
+      try {
+        // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // Parse address if available
+        let street = ''
+        let zip = ''
+        let city = ''
+        
+        if (customer.address) {
+          // Try to parse address like "Straße 123, 12345 Stadt"
+          const addressParts = customer.address.split(',')
+          if (addressParts.length >= 2) {
+            street = addressParts[0].trim()
+            const zipCity = addressParts[1].trim().split(' ')
+            if (zipCity.length >= 2) {
+              zip = zipCity[0]
+              city = zipCity.slice(1).join(' ')
+            }
+          } else {
+            street = customer.address
+          }
+        }
+        
+        // Build Lexware contact object
+        const contactData: any = {
+          version: 0,
+          roles: {
+            customer: {}
+          },
+          person: {
+            firstName: customer.firstName || '',
+            lastName: customer.lastName
+          }
+        }
+        
+        // Add address if available
+        if (street || city || zip) {
+          contactData.addresses = {
+            billing: [{
+              street: street,
+              zip: zip,
+              city: city,
+              countryCode: 'DE'
+            }]
+          }
+        }
+        
+        // Add email if available
+        if (customer.email) {
+          contactData.emailAddresses = {
+            business: [customer.email]
+          }
+        }
+        
+        // Add phone if available
+        if (customer.phone) {
+          contactData.phoneNumbers = {
+            mobile: [customer.phone]
+          }
+        }
+        
+        // Create contact in Lexware
+        const createResponse = await fetch('https://api.lexoffice.io/v1/contacts', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${settings.apiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(contactData)
+        })
+        
+        if (createResponse.ok) {
+          const result = await createResponse.json()
+          
+          // Update local customer with Lexware ID
+          await prisma.customer.update({
+            where: { id: customer.id },
+            data: { lexwareId: result.id }
+          })
+          
+          exportedCount++
+          console.log(`Kunde ${customer.firstName} ${customer.lastName} zu Lexware exportiert (ID: ${result.id})`)
+        } else {
+          const errorText = await createResponse.text()
+          console.error(`Fehler beim Export von ${customer.lastName}: ${createResponse.status} - ${errorText}`)
+        }
+      } catch (err) {
+        console.error(`Export-Fehler für Kunde ${customer.id}:`, err)
+      }
+    }
+
     // Update lastSync
     await prisma.settings.update({
         where: { id: settings.id },
@@ -1318,7 +1428,7 @@ ipcMain.handle('sync-lexware', async () => {
     })
 
     console.log('Sync-Lexware: Finished successfully')
-    return { success: true, message: `Sync fertig! ${syncedCount} Kunden neu, ${updatedCount} aktualisiert. ${syncedInvoices} Rechnungen importiert.` }
+    return { success: true, message: `Sync fertig! ${syncedCount} Kunden importiert, ${updatedCount} aktualisiert, ${exportedCount} zu Lexware exportiert. ${syncedInvoices} Rechnungen importiert.` }
 
   } catch (error) {
     console.error('Lexware Sync Error:', error)

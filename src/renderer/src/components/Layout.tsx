@@ -13,7 +13,8 @@ import {
   Package,
   Menu, // Add Menu icon
   Briefcase,
-  Wrench
+  Wrench,
+  RefreshCw
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -28,6 +29,9 @@ export default function Layout() {
   const [syncMessage, setSyncMessage] = useState('')
   const [lastSync, setLastSync] = useState<string | null>(null)
 
+  // @ts-ignore
+  const isElectron = window.electron !== undefined
+
   useEffect(() => {
     // Auto-Sync on startup
     const runAutoSync = async () => {
@@ -35,8 +39,7 @@ export default function Layout() {
         // Wait a bit for the app to be fully ready
         await new Promise(resolve => setTimeout(resolve, 3000))
         
-        // @ts-ignore
-        const settings = await window.electron.ipcRenderer.invoke('get-settings')
+        const settings = await api.settings.get()
         console.log('Auto-Sync Check:', settings)
         
         if (settings && settings.lastSync) {
@@ -46,14 +49,12 @@ export default function Layout() {
         if (settings && settings.autoSync && settings.apiKey) {
           setSyncMessage('Lexware Sync läuft...')
           setIsSyncing(true)
-          // @ts-ignore
-          const result = await window.electron.ipcRenderer.invoke('sync-lexware')
+          const result = await api.settings.syncLexware()
           console.log('Auto-Sync completed:', result)
           setSyncMessage('Sync abgeschlossen!')
           
           // Refresh last sync time
-          // @ts-ignore
-          const updatedSettings = await window.electron.ipcRenderer.invoke('get-settings')
+          const updatedSettings = await api.settings.get()
           if (updatedSettings && updatedSettings.lastSync) {
             setLastSync(new Date(updatedSettings.lastSync).toLocaleString())
           }
@@ -72,6 +73,37 @@ export default function Layout() {
     
     runAutoSync()
   }, [])
+
+  const handleManualSync = async () => {
+    if (isSyncing) return
+    
+    try {
+      setIsSyncing(true)
+      setSyncMessage('Lexware Sync läuft...')
+      
+      const result = await api.settings.syncLexware()
+      console.log('Manual sync completed:', result)
+      setSyncMessage(result.message || 'Sync abgeschlossen!')
+      
+      // Refresh last sync time
+      const updatedSettings = await api.settings.get()
+      if (updatedSettings && updatedSettings.lastSync) {
+        setLastSync(new Date(updatedSettings.lastSync).toLocaleString())
+      }
+      
+      setTimeout(() => {
+        setIsSyncing(false)
+        setSyncMessage('')
+      }, 5000)
+    } catch (err: any) {
+      console.error('Manual sync failed:', err)
+      setSyncMessage(err.message || 'Sync fehlgeschlagen')
+      setTimeout(() => {
+        setIsSyncing(false)
+        setSyncMessage('')
+      }, 5000)
+    }
+  }
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
@@ -155,6 +187,16 @@ export default function Layout() {
               }`} />
               {syncMessage}
             </div>
+          )}
+
+          {!isSyncing && (
+            <button
+              onClick={handleManualSync}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Lexware Sync
+            </button>
           )}
 
           {!isSyncing && lastSync && (

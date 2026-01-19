@@ -1,5 +1,7 @@
 import { Request, Response } from 'express'
 import prisma from '../db'
+import { join } from 'path'
+import { promises as fs } from 'fs'
 
 export const getSettings = async (req: Request, res: Response) => {
   try {
@@ -240,10 +242,176 @@ export const syncLexware = async (req: Request, res: Response) => {
       data: { lastSync: new Date() }
     })
 
+    // 4. Sync Invoices from Lexware and download PDFs
+    let allVouchers: any[] = []
+    let invoicePage = 0
+    let hasMoreInvoices = true
+    let syncedInvoices = 0
+
+    console.log('Starte Rechnungs-Sync...')
+    
+    while (hasMoreInvoices) {
+        console.log(`Lade Rechnungsliste Seite ${invoicePage}...`)
+        const invoiceResponse = await fetch(`https://api.lexoffice.io/v1/voucherlist?voucherType=invoice&voucherStatus=open,paid,voided&page=${invoicePage}&size=100`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${settings.apiKey}`,
+                'Accept': 'application/json'
+            }
+        })
+
+        if (!invoiceResponse.ok) {
+             console.error(`Fehler beim Laden der Rechnungsliste: ${invoiceResponse.status}`)
+             break
+        }
+
+        const invoiceData = await invoiceResponse.json()
+        const voucherList = invoiceData.content || []
+        allVouchers = [...allVouchers, ...voucherList]
+        
+        if (invoiceData.last || voucherList.length === 0) {
+            hasMoreInvoices = false
+        } else {
+            invoicePage++
+        }
+        
+        if (invoicePage > 100) hasMoreInvoices = false
+    }
+
+    console.log(`Gefundene Rechnungen in Lexware: ${allVouchers.length}`)
+    
+    // Create documents folder
+    const docsDir = join(__dirname, '../../../uploads/documents')
+    await fs.mkdir(docsDir, { recursive: true })
+
+    for (const voucher of allVouchers) {
+        // Rate limiting: Wait 500ms between requests to avoid 429 errors
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        // Fetch full invoice details to get contactId and correct amounts
+        const detailResponse = await fetch(`https://api.lexoffice.io/v1/invoices/${voucher.id}`, {
+             method: 'GET',
+             headers: {
+                'Authorization': `Bearer ${settings.apiKey}`,
+                'Accept': 'application/json'
+             }
+        })
+        
+        if (!detailResponse.ok) {
+            console.error(`Konnte Details für Rechnung ${voucher.voucherNumber} nicht laden: ${detailResponse.status}`)
+            continue
+        }
+        
+        const invoice = await detailResponse.json()
+
+        // Find local customer
+        const contactId = invoice.address?.contactId
+        
+        if (!contactId) {
+            continue
+        }
+
+        const customer = await prisma.customer.findUnique({
+            where: { lexwareId: contactId }
+        })
+
+        if (!customer) {
+            continue 
+        }
+
+        console.log(`Verarbeite Rechnung ${invoice.voucherNumber} für Kunde ${customer.firstName} ${customer.lastName}`)
+
+        // 1. Create/Update History Entry (ServiceRecord)
+        const recordData = {
+            date: new Date(invoice.voucherDate),
+            description: `Rechnung ${invoice.voucherNumber}`,
+            cost: invoice.totalPrice?.totalGrossAmount || 0,
+            lexwareId: invoice.id,
+            customerId: customer.id
+        }
+
+        const existingRecord = await prisma.serviceRecord.findUnique({
+            where: { lexwareId: invoice.id }
+        })
+
+        if (existingRecord) {
+            await prisma.serviceRecord.update({
+                where: { id: existingRecord.id },
+                data: recordData
+            })
+        } else {
+            await prisma.serviceRecord.create({
+                data: recordData
+            })
+        }
+
+        // 2. Download PDF and create Document
+        const existingDoc = await prisma.document.findUnique({
+            where: { lexwareId: invoice.id }
+        })
+
+        if (!existingDoc) {
+            try {
+                console.log(`Lade PDF für Rechnung ${invoice.voucherNumber}...`)
+                await new Promise(resolve => setTimeout(resolve, 200))
+                
+                const pdfResponse = await fetch(`https://api.lexoffice.io/v1/invoices/${invoice.id}/document`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${settings.apiKey}`,
+                        'Accept': 'application/json'
+                    }
+                })
+
+                if (pdfResponse.ok) {
+                    const pdfData = await pdfResponse.json()
+                    
+                    if (pdfData.documentFileId) {
+                         await new Promise(resolve => setTimeout(resolve, 200))
+                         const fileResponse = await fetch(`https://api.lexoffice.io/v1/files/${pdfData.documentFileId}`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${settings.apiKey}`,
+                                'Accept': '*/*'
+                            }
+                        })
+
+                        if (fileResponse.ok) {
+                            const buffer = await fileResponse.arrayBuffer()
+                            const fileName = `Rechnung_${invoice.voucherNumber}.pdf`
+                            const destPath = `/uploads/documents/${Date.now()}_${fileName}`
+                            const fullPath = join(docsDir, `${Date.now()}_${fileName}`)
+                            
+                            await fs.writeFile(fullPath, Buffer.from(buffer))
+
+                            await prisma.document.create({
+                                data: {
+                                    name: fileName,
+                                    path: destPath,
+                                    type: 'invoice',
+                                    lexwareId: invoice.id,
+                                    customerId: customer.id
+                                }
+                            })
+                            syncedInvoices++
+                            console.log(`PDF gespeichert: ${fileName}`)
+                        } else {
+                            console.error(`Fehler beim Laden der Datei ${pdfData.documentFileId}: ${fileResponse.status}`)
+                        }
+                    }
+                } else {
+                    console.error(`Fehler beim Abrufen der Dokument-ID für Rechnung ${invoice.id}: ${pdfResponse.status}`)
+                }
+            } catch (err) {
+                console.error(`Fehler beim PDF Download für Rechnung ${invoice.voucherNumber}:`, err)
+            }
+        }
+    }
+
     console.log('Sync-Lexware (Server): Finished successfully')
     res.json({ 
       success: true, 
-      message: `Sync fertig! ${syncedCount} Kunden importiert, ${updatedCount} aktualisiert, ${exportedCount} zu Lexware exportiert.` 
+      message: `Sync fertig! ${syncedCount} Kunden importiert, ${updatedCount} aktualisiert, ${exportedCount} zu Lexware exportiert, ${syncedInvoices} Rechnungen synchronisiert.` 
     })
 
   } catch (error: any) {

@@ -24,7 +24,7 @@ export const createCustomer = async (req: Request, res: Response) => {
     const { 
         firstName, lastName, address, phone, email,
         licensePlate, vin, make, model, hsn, tsn, firstRegistration, mileage, fuelType, transmission,
-        filePaths // Files are not handled here for now (would need upload endpoint)
+        filePaths // File paths (already uploaded to /uploads folder)
     } = data
 
     // Construct Prisma Data
@@ -54,8 +54,27 @@ export const createCustomer = async (req: Request, res: Response) => {
         }
     }
 
+    // Add documents if file paths are provided
+    if (filePaths && Array.isArray(filePaths) && filePaths.length > 0) {
+        createData.documents = {
+            create: filePaths.map((filePath: string) => {
+                // Extract filename from path
+                const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'document'
+                return {
+                    name: fileName,
+                    path: filePath,
+                    type: 'registration' // Fahrzeugschein
+                }
+            })
+        }
+    }
+
     const customer = await prisma.customer.create({
-      data: createData
+      data: createData,
+      include: {
+        vehicles: true,
+        documents: true
+      }
     })
     res.json(customer)
   } catch (error) {

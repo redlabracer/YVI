@@ -199,25 +199,51 @@ export default function BulkImport() {
     }
 
     try {
+      // First, upload the file if we have it (for web mode)
+      let uploadedFilePath: string | null = null
+      
+      // @ts-ignore
+      const isElectron = window.electron && typeof window.electron === 'object'
+      
+      if (isElectron && entry.name) {
+        // In Electron, we might have the original file path
+        // The file was already analyzed, so we need to get the path from somewhere
+        // For now, we'll use the IPC handler which handles files properly
+      } else if (entry.file) {
+        // Web mode: upload the file first
+        try {
+          uploadedFilePath = await api.files.upload(entry.file)
+        } catch (uploadErr) {
+          console.error('Error uploading file:', uploadErr)
+        }
+      } else if (entry.fileData) {
+        // Reconstruct file from base64 and upload
+        try {
+          const response = await fetch(entry.fileData)
+          const blob = await response.blob()
+          const file = new File([blob], entry.name, { type: blob.type })
+          uploadedFilePath = await api.files.upload(file)
+        } catch (uploadErr) {
+          console.error('Error uploading persisted file:', uploadErr)
+        }
+      }
+
+      // Create customer with vehicle data and document
       const customer = await api.customers.create({
         firstName: entry.result.firstName || '',
         lastName: entry.result.lastName || 'Unbekannt',
-        address: entry.result.address || ''
+        address: entry.result.address || '',
+        // Vehicle data
+        licensePlate: entry.result.licensePlate || '',
+        make: entry.result.make || '',
+        model: entry.result.model || '',
+        vin: entry.result.vin || '',
+        hsn: entry.result.hsn || '',
+        tsn: entry.result.tsn || '',
+        firstRegistration: entry.result.firstRegistration || '',
+        // Document (Fahrzeugschein)
+        filePaths: uploadedFilePath ? [uploadedFilePath] : []
       })
-
-      // Create vehicle if we have data
-      if (entry.result.licensePlate || entry.result.make) {
-        await api.vehicles.create({
-          customerId: customer.id,
-          licensePlate: entry.result.licensePlate || '',
-          make: entry.result.make || '',
-          model: entry.result.model || '',
-          vin: entry.result.vin || '',
-          hsn: entry.result.hsn || '',
-          tsn: entry.result.tsn || '',
-          firstRegistration: entry.result.firstRegistration || ''
-        })
-      }
 
       return customer.id
     } catch (err) {

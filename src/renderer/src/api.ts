@@ -12,6 +12,19 @@ export interface Customer {
   tireStorageSpot?: string | null;
 }
 
+export interface CustomerCreateData extends Customer {
+  // Vehicle data (optional, will create vehicle if provided)
+  licensePlate?: string;
+  make?: string;
+  model?: string;
+  vin?: string;
+  hsn?: string;
+  tsn?: string;
+  firstRegistration?: string;
+  // Documents (optional file paths)
+  filePaths?: string[];
+}
+
 // Wir prüfen, ob wir im Electron-Umfeld laufen
 // @ts-ignore
 // Wenn "useRemote" true ist, tun wir so als wären wir im Web-Modus, damit wir die API Calls nutzen
@@ -91,7 +104,7 @@ export const api = {
       }
     },
 
-    create: async (data: Customer) => {
+    create: async (data: CustomerCreateData) => {
       if (isElectron) {
         // @ts-ignore
         return await window.electron.ipcRenderer.invoke('create-customer', data);

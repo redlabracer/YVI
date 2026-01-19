@@ -10,6 +10,8 @@ export default function Settings() {
   const { theme, toggleTheme } = useTheme()
   const [apiKey, setApiKey] = useState('')
   const [openaiKey, setOpenaiKey] = useState('')
+  const [openaiModel, setOpenaiModel] = useState('gpt-4o-mini')
+  const [aiPrompt, setAiPrompt] = useState('')
   const [carPartsUser, setCarPartsUser] = useState('')
   const [carPartsPass, setCarPartsPass] = useState('')
   const [lexwareUser, setLexwareUser] = useState('')
@@ -18,6 +20,21 @@ export default function Settings() {
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [status, setStatus] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Default AI Prompt
+  const defaultAiPrompt = `Analysiere dieses Fahrzeugschein-Dokument (Zulassungsbescheinigung Teil I) und extrahiere folgende Informationen:
+
+1. Halter/Besitzer (Name, Vorname)
+2. Adresse (Straße, PLZ, Ort)
+3. Kennzeichen
+4. Fahrzeugidentifikationsnummer (FIN/VIN)
+5. Marke und Modell
+6. HSN (Herstellerschlüsselnummer, 4-stellig)
+7. TSN (Typschlüsselnummer, 3-stellig)
+8. Erstzulassungsdatum
+
+Gib die Daten im JSON-Format zurück mit folgenden Feldern:
+firstName, lastName, address, licensePlate, vin, make, model, hsn, tsn, firstRegistration (YYYY-MM-DD Format)`
 
   // Cloud / Remote Database State
   const [useRemote, setUseRemote] = useState(localStorage.getItem('useRemote') === 'true')
@@ -36,6 +53,8 @@ export default function Settings() {
         if (settings) {
           if (settings.apiKey) setApiKey(settings.apiKey)
           if (settings.openaiKey) setOpenaiKey(settings.openaiKey)
+          if (settings.openaiModel) setOpenaiModel(settings.openaiModel)
+          if (settings.aiPrompt) setAiPrompt(settings.aiPrompt)
           if (settings.carPartsUser) setCarPartsUser(settings.carPartsUser)
           if (settings.carPartsPass) setCarPartsPass(settings.carPartsPass)
           if (settings.lexwareUser) setLexwareUser(settings.lexwareUser)
@@ -57,7 +76,17 @@ export default function Settings() {
 
   const handleSave = async () => {
     try {
-      await api.settings.save({ apiKey, openaiKey, carPartsUser, carPartsPass, lexwareUser, lexwarePass, autoSync })
+      await api.settings.save({ 
+        apiKey, 
+        openaiKey, 
+        openaiModel,
+        aiPrompt: aiPrompt || defaultAiPrompt,
+        carPartsUser, 
+        carPartsPass, 
+        lexwareUser, 
+        lexwarePass, 
+        autoSync 
+      })
       showStatus('success', 'Einstellungen erfolgreich gespeichert!')
     } catch (err) {
       console.error(err)
@@ -382,9 +411,48 @@ export default function Settings() {
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
                 placeholder="sk-..."
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">KI-Modell</label>
+              <select
+                value={openaiModel}
+                onChange={(e) => setOpenaiModel(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-gray-900 dark:text-white"
+              >
+                <option value="gpt-4o-mini">GPT-4o Mini - Schnell & Günstig (~$0.15/1M Token) ⭐ Empfohlen</option>
+                <option value="gpt-4o">GPT-4o - Beste Qualität (~$2.50/1M Token)</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo - Sehr gute Qualität (~$10/1M Token)</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo - Am Günstigsten (~$0.50/1M Token)</option>
+              </select>
               <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                Empfohlen: GPT-4o-mini (kostengünstig und schnell).
+                GPT-4o Mini bietet das beste Preis-Leistungs-Verhältnis für Dokumentenanalyse.
               </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                KI-Prompt (für Dokumentenanalyse)
+              </label>
+              <textarea
+                value={aiPrompt || defaultAiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                rows={8}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-gray-900 dark:text-white font-mono resize-none"
+                placeholder="Prompt für die Dokumentenanalyse..."
+              />
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Dieser Prompt wird zur Analyse von Fahrzeugscheinen verwendet.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAiPrompt(defaultAiPrompt)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Zurücksetzen
+                </button>
+              </div>
             </div>
 
             <div className="pt-2">

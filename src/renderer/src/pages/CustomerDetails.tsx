@@ -1041,27 +1041,45 @@ export default function CustomerDetails() {
                         <span className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 flex items-center gap-1">
                           <FileText size={12} /> Notizen & Daten
                         </span>
-                        <button 
-                          onClick={() => {
-                            setEditingVehicleId(vehicle.id)
-                            setTempVehicleData({
-                              make: vehicle.make || '',
-                              model: vehicle.model || '',
-                              licensePlate: vehicle.licensePlate || '',
-                              vin: vehicle.vin || '',
-                              firstRegistration: vehicle.firstRegistration ? formatDateForInput(new Date(vehicle.firstRegistration)) : '',
-                              hsn: vehicle.hsn || '',
-                              tsn: vehicle.tsn || '',
-                              notes: vehicle.notes || '',
-                              mileage: vehicle.mileage ? vehicle.mileage.toString() : '',
-                              fuelType: vehicle.fuelType || '',
-                              transmission: vehicle.transmission || ''
-                            })
-                          }}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-                        >
-                          <Edit2 size={12} /> Bearbeiten
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => {
+                              setEditingVehicleId(vehicle.id)
+                              setTempVehicleData({
+                                make: vehicle.make || '',
+                                model: vehicle.model || '',
+                                licensePlate: vehicle.licensePlate || '',
+                                vin: vehicle.vin || '',
+                                firstRegistration: vehicle.firstRegistration ? formatDateForInput(new Date(vehicle.firstRegistration)) : '',
+                                hsn: vehicle.hsn || '',
+                                tsn: vehicle.tsn || '',
+                                notes: vehicle.notes || '',
+                                mileage: vehicle.mileage ? vehicle.mileage.toString() : '',
+                                fuelType: vehicle.fuelType || '',
+                                transmission: vehicle.transmission || ''
+                              })
+                            }}
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                          >
+                            <Edit2 size={12} /> Bearbeiten
+                          </button>
+                          <button 
+                            onClick={async () => {
+                              if (confirm(`Fahrzeug "${vehicle.make} ${vehicle.model}" wirklich löschen?`)) {
+                                try {
+                                  await api.vehicles.delete(vehicle.id)
+                                  loadCustomer()
+                                } catch (err) {
+                                  console.error('Error deleting vehicle:', err)
+                                  alert('Fehler beim Löschen des Fahrzeugs')
+                                }
+                              }
+                            }}
+                            className="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1"
+                          >
+                            <Trash2 size={12} /> Löschen
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700 min-h-[60px]">

@@ -100,6 +100,8 @@ CREATE TABLE IF NOT EXISTS "Settings" (
   "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   "apiKey" TEXT,
   "openaiKey" TEXT,
+  "openaiModel" TEXT DEFAULT 'gpt-4o-mini',
+  "aiPrompt" TEXT,
   "carPartsUser" TEXT,
   "carPartsPass" TEXT,
   "conradUser" TEXT,
@@ -153,6 +155,10 @@ CREATE TABLE IF NOT EXISTS "TireStorageSpot" (
   "status" TEXT,
   "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add new columns to existing Settings table (will fail silently if already exists)
+ALTER TABLE "Settings" ADD COLUMN "openaiModel" TEXT DEFAULT 'gpt-4o-mini';
+ALTER TABLE "Settings" ADD COLUMN "aiPrompt" TEXT;
 `
 
 export async function runMigrations(): Promise<boolean> {

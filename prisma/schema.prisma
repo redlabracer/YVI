@@ -95,6 +95,8 @@ model Settings {
   id        Int     @id @default(autoincrement())
   apiKey    String? // Lexware API Key
   openaiKey String? // OpenAI API Key
+  openaiModel String? @default("gpt-4o-mini") // OpenAI Model
+  aiPrompt  String? // Custom AI Prompt for document analysis
   carPartsUser String? // Car Parts Catalog Username
   carPartsPass String? // Car Parts Catalog Password
   conradUser   String? // Conrad Username

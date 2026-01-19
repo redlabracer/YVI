@@ -30,15 +30,15 @@ export default function Customers() {
   )
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kundenstamm</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Verwalten Sie Ihre Kunden und deren Fahrzeuge</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Kundenstamm</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mt-1 hidden sm:block">Verwalten Sie Ihre Kunden und deren Fahrzeuge</p>
         </div>
         <button 
           onClick={() => navigate('/create-customer')}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none w-full sm:w-auto"
         >
           <Plus size={18} />
           Neuer Kunde
@@ -46,8 +46,8 @@ export default function Customers() {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
-          <div className="relative max-w-md">
+        <div className="p-3 sm:p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" size={18} />
             <input 
               type="text"
@@ -59,7 +59,55 @@ export default function Customers() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700">
+          {filteredCustomers.map((customer) => (
+            <div 
+              key={customer.id} 
+              onClick={() => navigate(`/customer/${customer.id}`)}
+              className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer active:bg-gray-100 dark:active:bg-gray-700"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                    {customer.firstName[0]}{customer.lastName[0]}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-gray-900 dark:text-white truncate">{customer.lastName}, {customer.firstName}</div>
+                    {customer.phone && (
+                      <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-sm">
+                        <Phone size={12} />
+                        <span className="truncate">{customer.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  {customer.vehicles && customer.vehicles.length > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-medium">
+                      <Car size={12} />
+                      {customer.vehicles[0].licensePlate}
+                    </span>
+                  )}
+                  <ChevronRight className="text-gray-300 dark:text-gray-600" size={20} />
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredCustomers.length === 0 && (
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400 dark:text-gray-500">
+                  <Search size={24} />
+                </div>
+                <p>Keine Kunden gefunden</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-gray-50/50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 uppercase tracking-wider text-xs font-semibold">

@@ -185,29 +185,30 @@ export default function CreateCustomer() {
 
   return (
     <div className="space-y-6 pb-10">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-4">
+      {/* Mobile Header */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => navigate('/')} 
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-500 dark:text-gray-400 transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-500 dark:text-gray-400 transition-colors flex-shrink-0"
           >
-            <ArrowLeft size={24} />
+            <ArrowLeft size={20} />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Neuer Kunde</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Erstellen Sie einen neuen Kunden und fügen Sie ein Fahrzeug hinzu.</p>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Neuer Kunde</h1>
+            <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm hidden sm:block">Erstellen Sie einen neuen Kunden und fügen Sie ein Fahrzeug hinzu.</p>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3 ml-auto sm:ml-0">
           <button 
             onClick={() => navigate('/')}
-            className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium text-sm"
+            className="px-3 sm:px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-medium text-sm"
           >
             Abbrechen
           </button>
           <button 
             onClick={handleSubmit}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm shadow-lg shadow-blue-200 dark:shadow-none flex items-center gap-2"
+            className="px-4 sm:px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm shadow-lg shadow-blue-200 dark:shadow-none flex items-center gap-2"
           >
             <Save size={16} /> Speichern
           </button>

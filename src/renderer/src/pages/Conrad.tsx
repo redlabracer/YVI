@@ -129,14 +129,14 @@ const Conrad = () => {
 
   if (!isElectron) {
     return (
-        <div className="h-[calc(100vh-8rem)] w-full flex flex-col items-center justify-center space-y-4">
-            <h1 className="text-2xl font-bold">Conrad (Carparts)</h1>
-            <p className="text-gray-600">Integrated view is only available in the Desktop App.</p>
+        <div className="h-[calc(100vh-8rem)] w-full flex flex-col items-center justify-center space-y-4 px-4">
+            <h1 className="text-2xl font-bold text-center dark:text-white">Conrad (Carparts)</h1>
+            <p className="text-gray-600 dark:text-gray-400 text-center">Die integrierte Ansicht ist nur in der Desktop-App verfügbar.</p>
             <button 
                 onClick={() => window.open("https://tm1.carparts-cat.com/login/car", "_blank")}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
             >
-                Open in Browser
+                Im Browser öffnen
             </button>
         </div>
     )

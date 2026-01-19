@@ -351,50 +351,42 @@ export default function TireStorage() {
 
   return (
     <div className="h-full flex flex-col gap-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-          <Package className="w-8 h-8" />
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+          <Package className="w-6 h-6 sm:w-8 sm:h-8" />
           Reifenlager
         </h1>
-        <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-yellow-200 dark:bg-yellow-600 border border-yellow-300 dark:border-yellow-700 rounded"></div>
+        <div className="flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-yellow-200 dark:bg-yellow-600 border border-yellow-300 dark:border-yellow-700 rounded"></div>
             <span>Frei</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-200 dark:bg-red-600 border border-red-300 dark:border-red-700 rounded"></div>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-red-200 dark:bg-red-600 border border-red-300 dark:border-red-700 rounded"></div>
             <span>Belegt</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-200 dark:bg-blue-600 border border-blue-300 dark:border-blue-700 rounded"></div>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-blue-200 dark:bg-blue-600 border border-blue-300 dark:border-blue-700 rounded"></div>
             <span>Reserviert</span>
-          </div>
-          <div className="flex items-cegray-500 dark:bg-gray-500 border border-gray-600 dark:border-gray-600 rounded"></div>
-            <span>Gesperrt</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-nter gap-2">
-            <div className="w-4 h-4 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded"></div>
-            <span>Standard</span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex gap-4 overflow-hidden">
+      <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow p-2 sm:p-4 flex flex-col lg:flex-row gap-4 overflow-hidden min-h-0">
         {/* Grid Area */}
-        <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded p-4 bg-gray-200 dark:bg-gray-900">
+        <div className="flex-1 overflow-auto border border-gray-200 dark:border-gray-700 rounded p-2 sm:p-4 bg-gray-200 dark:bg-gray-900 min-h-[300px]">
           <div 
-            className="grid gap-[2px]"
+            className="grid gap-[1px] sm:gap-[2px]"
             style={{
-              gridTemplateColumns: `30px repeat(${cols}, minmax(30px, 1fr))`,
+              gridTemplateColumns: `20px repeat(${cols}, minmax(20px, 1fr))`,
               width: '100%',
               minWidth: 'fit-content'
             }}
           >
             {/* Header Row */}
-            <div className="h-8 bg-gray-100 dark:bg-gray-800 sticky top-0 z-10"></div>
+            <div className="h-6 sm:h-8 bg-gray-100 dark:bg-gray-800 sticky top-0 z-10"></div>
             {Array.from({ length: cols }).map((_, i) => (
-              <div key={`head-${i}`} className="h-8 flex items-center justify-center font-bold text-gray-600 dark:text-gray-400 text-xs bg-gray-100 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 sticky top-0 z-10">
+              <div key={`head-${i}`} className="h-6 sm:h-8 flex items-center justify-center font-bold text-gray-600 dark:text-gray-400 text-[10px] sm:text-xs bg-gray-100 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 sticky top-0 z-10">
                 {getColLabel(i)}
               </div>
             ))}
@@ -633,8 +625,8 @@ export default function TireStorage() {
         </div>
 
         {/* Sidebar / Details Panel */}
-        <div className="w-80 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-4 flex flex-col">
-          <h2 className="font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
+        <div className={`lg:w-80 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex flex-col ${selectedSpot ? 'block' : 'hidden lg:block'}`}>
+          <h2 className="font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-gray-900 dark:text-white text-sm sm:text-base">
             <Info className="w-4 h-4" />
             Details
           </h2>

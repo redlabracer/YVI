@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Upload, FileText, Users, CheckCircle, XCircle, Loader2, 
-  ArrowLeft, Play, Trash2, AlertTriangle, Eye, EyeOff, StopCircle, Key
+  ArrowLeft, Play, Trash2, AlertTriangle, Eye, EyeOff, StopCircle, Key,
+  UserPlus, Car, SkipForward
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -15,7 +16,7 @@ interface FileEntry {
   filePath?: string // Electron file path
   fileData?: string // Base64 encoded file data for persistence
   name: string
-  status: 'pending' | 'analyzing' | 'success' | 'error'
+  status: 'pending' | 'analyzing' | 'success' | 'error' | 'duplicate'
   result?: {
     firstName?: string
     lastName?: string
@@ -30,6 +31,9 @@ interface FileEntry {
   }
   error?: string
   customerId?: number
+  duplicateInfo?: {
+    matches: any[]
+  }
 }
 
 interface PersistedState {
@@ -72,6 +76,12 @@ export default function BulkImport() {
   const [autoCreate, setAutoCreate] = useState(false)
   const [apiKeyMissing, setApiKeyMissing] = useState(false)
   const [isCancelled, setIsCancelled] = useState(false)
+  
+  // Duplicate handling state
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [currentDuplicateEntry, setCurrentDuplicateEntry] = useState<FileEntry | null>(null)
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
+  const [duplicateResolveCallback, setDuplicateResolveCallback] = useState<((action: 'create' | 'skip' | 'add-vehicle', customerId?: number) => void) | null>(null)
   
   // @ts-ignore - Prüfe ob wir im Electron-Modus sind (und nicht Remote-Modus benutzen)
   const useRemote = localStorage.getItem('useRemote') === 'true'
@@ -231,12 +241,47 @@ export default function BulkImport() {
     }
   }
 
-  const createCustomer = async (entry: FileEntry): Promise<number | null> => {
+  const createCustomer = async (entry: FileEntry, skipDuplicateCheck: boolean = false): Promise<number | null> => {
     if (!entry.result || !entry.result.lastName) {
       return null
     }
 
     try {
+      // Check for duplicates first (unless skipped)
+      if (!skipDuplicateCheck) {
+        const duplicateCheck = await api.customers.checkDuplicate({
+          firstName: entry.result.firstName,
+          lastName: entry.result.lastName,
+          licensePlate: entry.result.licensePlate
+        })
+        
+        if (duplicateCheck.isDuplicate && duplicateCheck.matches?.length > 0) {
+          // Show duplicate modal and wait for user decision
+          return new Promise((resolve) => {
+            setCurrentDuplicateEntry(entry)
+            setDuplicateMatches(duplicateCheck.matches)
+            setDuplicateResolveCallback(() => async (action: 'create' | 'skip' | 'add-vehicle', customerId?: number) => {
+              setShowDuplicateModal(false)
+              setCurrentDuplicateEntry(null)
+              setDuplicateMatches([])
+              
+              if (action === 'skip') {
+                resolve(null)
+              } else if (action === 'create') {
+                // Force create (skip duplicate check)
+                const id = await createCustomer(entry, true)
+                resolve(id)
+              } else if (action === 'add-vehicle' && customerId) {
+                // Add vehicle to existing customer
+                const vehicleId = await addVehicleToCustomer(entry, customerId)
+                resolve(vehicleId ? customerId : null)
+              }
+            })
+            setShowDuplicateModal(true)
+          })
+        }
+      }
+
       let filePaths: string[] = []
       
       if (isElectron && entry.filePath) {
@@ -283,6 +328,28 @@ export default function BulkImport() {
       return customer.id
     } catch (err) {
       console.error('Error creating customer:', err)
+      return null
+    }
+  }
+
+  // Add vehicle to existing customer
+  const addVehicleToCustomer = async (entry: FileEntry, customerId: number): Promise<number | null> => {
+    if (!entry.result) return null
+    
+    try {
+      const vehicle = await api.vehicles.create({
+        customerId,
+        licensePlate: entry.result.licensePlate || '',
+        make: entry.result.make || '',
+        model: entry.result.model || '',
+        vin: entry.result.vin || '',
+        hsn: entry.result.hsn || '',
+        tsn: entry.result.tsn || '',
+        firstRegistration: entry.result.firstRegistration || ''
+      })
+      return vehicle.id
+    } catch (err) {
+      console.error('Error adding vehicle to customer:', err)
       return null
     }
   }
@@ -685,6 +752,108 @@ export default function BulkImport() {
             <Users className="w-4 h-4" />
             Alle Kunden erstellen ({successCount - createdCount})
           </button>
+        </div>
+      )}
+
+      {/* Duplicate Detection Modal */}
+      {showDuplicateModal && currentDuplicateEntry && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Mögliches Duplikat erkannt</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {currentDuplicateEntry.name}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              {/* New Entry Info */}
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <h4 className="font-medium text-blue-900 dark:text-blue-200 mb-2">Neuer Eintrag:</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-blue-700 dark:text-blue-300">Name:</span>
+                    <span className="ml-2 text-blue-900 dark:text-blue-100">{currentDuplicateEntry.result?.firstName} {currentDuplicateEntry.result?.lastName}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 dark:text-blue-300">Kennzeichen:</span>
+                    <span className="ml-2 text-blue-900 dark:text-blue-100">{currentDuplicateEntry.result?.licensePlate || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 dark:text-blue-300">Fahrzeug:</span>
+                    <span className="ml-2 text-blue-900 dark:text-blue-100">{currentDuplicateEntry.result?.make} {currentDuplicateEntry.result?.model}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Existing Matches */}
+              <div>
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3">Gefundene Übereinstimmungen:</h4>
+                <div className="space-y-2">
+                  {duplicateMatches.map((match) => (
+                    <div key={match.id} className="p-4 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {match.firstName} {match.lastName}
+                            </span>
+                            <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs rounded">
+                              #{match.id}
+                            </span>
+                            {match.matchReason && (
+                              <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs rounded">
+                                {match.matchReason}
+                              </span>
+                            )}
+                          </div>
+                          {match.phone && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{match.phone}</p>
+                          )}
+                          {match.vehicles && match.vehicles.length > 0 && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                              Fahrzeuge: {match.vehicles.join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => duplicateResolveCallback?.('add-vehicle', match.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          <Car size={14} />
+                          Fahrzeug hinzufügen
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+              <button
+                onClick={() => duplicateResolveCallback?.('skip')}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <SkipForward size={16} />
+                Überspringen
+              </button>
+              <button
+                onClick={() => duplicateResolveCallback?.('create')}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <UserPlus size={16} />
+                Trotzdem erstellen
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

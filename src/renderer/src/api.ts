@@ -119,7 +119,7 @@ export const api = {
         return await window.electron.ipcRenderer.invoke('update-customer', data);
       } else {
         // API: PUT /api/customers/:id
-        return await request(`customers/${data.id}`, 'PUT', data); // Wir müssen die Server Routes noch anpassen dafür!
+        return await request(`customers/${data.id}`, 'PUT', data);
       }
     },
     
@@ -131,6 +131,39 @@ export const api = {
           return await request(`customers/${id}`, 'DELETE');
         }
       },
+    
+    // Search customers (for merge/transfer dialogs)
+    search: async (query: string, excludeId?: number) => {
+      if (isElectron) {
+        // @ts-ignore
+        return await window.electron.ipcRenderer.invoke('search-customers', { query, excludeId });
+      } else {
+        const params = new URLSearchParams({ query });
+        if (excludeId) params.append('excludeId', String(excludeId));
+        return await request(`customers/search?${params.toString()}`);
+      }
+    },
+    
+    // Merge two customers
+    merge: async (targetCustomerId: number, sourceCustomerId: number, keepTargetData: boolean = true) => {
+      if (isElectron) {
+        // @ts-ignore
+        return await window.electron.ipcRenderer.invoke('merge-customers', { targetCustomerId, sourceCustomerId, keepTargetData });
+      } else {
+        return await request('customers/merge', 'POST', { targetCustomerId, sourceCustomerId, keepTargetData });
+      }
+    },
+    
+    // Transfer vehicle to another customer
+    transferVehicle: async (vehicleId: number, targetCustomerId: number) => {
+      if (isElectron) {
+        // @ts-ignore
+        return await window.electron.ipcRenderer.invoke('transfer-vehicle', { vehicleId, targetCustomerId });
+      } else {
+        return await request('customers/transfer-vehicle', 'POST', { vehicleId, targetCustomerId });
+      }
+    }
+  },
 
   // --- TODOS ---
   todos: {
@@ -166,7 +199,6 @@ export const api = {
         return await request(`todos/${id}`, 'DELETE');
       }
     }
-  }
   },
 
   // --- FAHRZEUGE (Vehicles) ---
@@ -531,42 +563,6 @@ export const api = {
               return await request(`tires/${data.id}`, 'PUT', data);
           }
       }
-  },
-
-  // --- TODOS ---
-  todos: {
-    getAll: async () => {
-      if (isElectron) {
-        // @ts-ignore
-        return await window.electron.ipcRenderer.invoke('get-todos');
-      } else {
-        return await request('todos');
-      }
-    },
-    create: async (data: any) => {
-      if (isElectron) {
-        // @ts-ignore
-        return await window.electron.ipcRenderer.invoke('create-todo', data);
-      } else {
-        return await request('todos', 'POST', data);
-      }
-    },
-    update: async (data: any) => {
-      if (isElectron) {
-        // @ts-ignore
-        return await window.electron.ipcRenderer.invoke('update-todo', data);
-      } else {
-         return await request(`todos/${data.id}`, 'PUT', data);
-      }
-    },
-    delete: async (id: number) => {
-      if (isElectron) {
-        // @ts-ignore
-        return await window.electron.ipcRenderer.invoke('delete-todo', id);
-      } else {
-        return await request(`todos/${id}`, 'DELETE');
-      }
-    }
   },
 
   // --- DASHBOARD ---

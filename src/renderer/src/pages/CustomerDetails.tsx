@@ -4,7 +4,8 @@ import QRCode from 'qrcode'
 import { 
   ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, MapPin, 
   Car, FileText, History, Plus, Upload, Calendar, DollarSign,
-  File, ExternalLink, Package, Wand2, Loader2, Smartphone
+  File, ExternalLink, Package, Wand2, Loader2, Smartphone, 
+  Users, ArrowRightLeft, Search
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -21,6 +22,15 @@ export default function CustomerDetails() {
   const [tunnelPassword, setTunnelPassword] = useState('')
   const [uploadedFiles, setUploadedFiles] = useState<{ path: string; file?: File }[]>([])
   const [activeUploadContext, setActiveUploadContext] = useState<'vehicle' | 'history' | null>(null)
+  
+  // Merge/Transfer State
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [transferVehicleId, setTransferVehicleId] = useState<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   
   // Checking for Electron
   // @ts-ignore
@@ -134,6 +144,82 @@ export default function CustomerDetails() {
         console.error(err)
         alert('Fehler beim Löschen')
     }
+  }
+
+  // Search for customers to merge/transfer to
+  const handleSearchCustomers = async (query: string) => {
+    setSearchQuery(query)
+    if (query.length < 2) {
+      setSearchResults([])
+      return
+    }
+    
+    setIsSearching(true)
+    try {
+      const results = await api.customers.search(query, customer?.id)
+      setSearchResults(results)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  // Merge this customer into another (this customer will be deleted)
+  const handleMergeCustomers = async () => {
+    if (!selectedCustomer || !customer) return
+    
+    if (!confirm(`Möchten Sie wirklich "${customer.firstName} ${customer.lastName}" mit "${selectedCustomer.firstName} ${selectedCustomer.lastName}" zusammenführen?\n\nAlle Fahrzeuge, Dokumente und Historie werden übertragen. Dieser Kunde wird gelöscht.`)) {
+      return
+    }
+    
+    try {
+      const result = await api.customers.merge(selectedCustomer.id, customer.id, true)
+      alert(result.message)
+      navigate(`/customer/${selectedCustomer.id}`)
+    } catch (err: any) {
+      console.error(err)
+      alert(err.message || 'Fehler beim Zusammenführen')
+    }
+  }
+
+  // Transfer a vehicle to another customer
+  const handleTransferVehicle = async () => {
+    if (!selectedCustomer || !transferVehicleId) return
+    
+    const vehicle = customer?.vehicles?.find((v: any) => v.id === transferVehicleId)
+    if (!confirm(`Möchten Sie das Fahrzeug "${vehicle?.licensePlate || vehicle?.make + ' ' + vehicle?.model}" zu "${selectedCustomer.firstName} ${selectedCustomer.lastName}" übertragen?`)) {
+      return
+    }
+    
+    try {
+      const result = await api.customers.transferVehicle(transferVehicleId, selectedCustomer.id)
+      alert(result.message)
+      setShowTransferModal(false)
+      setTransferVehicleId(null)
+      setSelectedCustomer(null)
+      setSearchQuery('')
+      setSearchResults([])
+      loadCustomer(id!)
+    } catch (err: any) {
+      console.error(err)
+      alert(err.message || 'Fehler beim Übertragen')
+    }
+  }
+
+  const openTransferModal = (vehicleId: number) => {
+    setTransferVehicleId(vehicleId)
+    setSelectedCustomer(null)
+    setSearchQuery('')
+    setSearchResults([])
+    setShowTransferModal(true)
+  }
+
+  const openMergeModal = () => {
+    setSelectedCustomer(null)
+    setSearchQuery('')
+    setSearchResults([])
+    setShowMergeModal(true)
   }
 
   const startMobileUpload = async (context: 'vehicle' | 'history') => {
@@ -477,6 +563,9 @@ export default function CustomerDetails() {
             </>
           ) : (
             <>
+              <button onClick={openMergeModal} className="p-2 text-gray-500 dark:text-gray-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg hover:text-purple-600 dark:hover:text-purple-400 transition-colors" title="Mit anderem Kunden zusammenführen">
+                <Users size={20} />
+              </button>
               <button onClick={handleEditToggle} className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                 <Edit2 size={20} />
               </button>
@@ -1064,6 +1153,12 @@ export default function CustomerDetails() {
                             <Edit2 size={12} /> Bearbeiten
                           </button>
                           <button 
+                            onClick={() => openTransferModal(vehicle.id)}
+                            className="text-xs text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+                          >
+                            <ArrowRightLeft size={12} /> Übertragen
+                          </button>
+                          <button 
                             onClick={async () => {
                               if (confirm(`Fahrzeug "${vehicle.make} ${vehicle.model}" wirklich löschen?`)) {
                                 try {
@@ -1512,6 +1607,210 @@ export default function CustomerDetails() {
                   Schließen
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Merge Customer Modal */}
+      {showMergeModal && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <Users className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Kunden zusammenführen</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Alle Daten werden zum ausgewählten Kunden übertragen
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <strong>Achtung:</strong> {customer?.firstName} {customer?.lastName} wird gelöscht und alle Fahrzeuge, Dokumente und Historie werden zum ausgewählten Kunden übertragen.
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Ziel-Kunde suchen
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Name, Kennzeichen, Telefon..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchCustomers(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+                </div>
+              </div>
+              
+              {searchResults.length > 0 && (
+                <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                  {searchResults.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedCustomer(c)}
+                      className={`w-full p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+                        selectedCustomer?.id === c.id ? 'bg-purple-50 dark:bg-purple-900/20' : ''
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {c.firstName} {c.lastName}
+                      </div>
+                      {c.vehicles?.length > 0 && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Fahrzeuge: {c.vehicles.map((v: any) => v.licensePlate || v.make).join(', ')}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {selectedCustomer && (
+                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                  <p className="text-sm text-purple-800 dark:text-purple-200">
+                    <strong>Ausgewählt:</strong> {selectedCustomer.firstName} {selectedCustomer.lastName}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowMergeModal(false)
+                  setSelectedCustomer(null)
+                  setSearchQuery('')
+                  setSearchResults([])
+                }}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleMergeCustomers}
+                disabled={!selectedCustomer}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Users size={16} />
+                Zusammenführen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Vehicle Modal */}
+      {showTransferModal && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <ArrowRightLeft className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Fahrzeug übertragen</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Fahrzeug zu einem anderen Kunden verschieben
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {transferVehicleId && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    <strong>Fahrzeug:</strong> {(() => {
+                      const v = customer?.vehicles?.find((v: any) => v.id === transferVehicleId)
+                      return v ? `${v.licensePlate || ''} ${v.make || ''} ${v.model || ''}` : ''
+                    })()}
+                  </p>
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Neuen Besitzer suchen
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Name, Kennzeichen, Telefon..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchCustomers(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+                </div>
+              </div>
+              
+              {searchResults.length > 0 && (
+                <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                  {searchResults.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedCustomer(c)}
+                      className={`w-full p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+                        selectedCustomer?.id === c.id ? 'bg-purple-50 dark:bg-purple-900/20' : ''
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {c.firstName} {c.lastName}
+                      </div>
+                      {c.vehicles?.length > 0 && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Fahrzeuge: {c.vehicles.map((v: any) => v.licensePlate || v.make).join(', ')}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {selectedCustomer && (
+                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                  <p className="text-sm text-purple-800 dark:text-purple-200">
+                    <strong>Neuer Besitzer:</strong> {selectedCustomer.firstName} {selectedCustomer.lastName}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowTransferModal(false)
+                  setTransferVehicleId(null)
+                  setSelectedCustomer(null)
+                  setSearchQuery('')
+                  setSearchResults([])
+                }}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleTransferVehicle}
+                disabled={!selectedCustomer}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <ArrowRightLeft size={16} />
+                Übertragen
+              </button>
             </div>
           </div>
         </div>

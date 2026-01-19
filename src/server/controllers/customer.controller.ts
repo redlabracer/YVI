@@ -266,3 +266,202 @@ export const checkDuplicate = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Fehler bei der Duplikatsprüfung' })
   }
 }
+
+// Merge two customers - keeps targetCustomerId, moves all data from sourceCustomerId, then deletes source
+export const mergeCustomers = async (req: Request, res: Response) => {
+  try {
+    const { targetCustomerId, sourceCustomerId, keepTargetData } = req.body
+    
+    if (!targetCustomerId || !sourceCustomerId) {
+      return res.status(400).json({ error: 'Beide Kunden-IDs sind erforderlich' })
+    }
+    
+    if (targetCustomerId === sourceCustomerId) {
+      return res.status(400).json({ error: 'Kann einen Kunden nicht mit sich selbst zusammenführen' })
+    }
+    
+    // Get both customers
+    const [target, source] = await Promise.all([
+      prisma.customer.findUnique({ 
+        where: { id: parseInt(targetCustomerId) },
+        include: { vehicles: true, documents: true, history: true, appointments: true }
+      }),
+      prisma.customer.findUnique({ 
+        where: { id: parseInt(sourceCustomerId) },
+        include: { vehicles: true, documents: true, history: true, appointments: true }
+      })
+    ])
+    
+    if (!target || !source) {
+      return res.status(404).json({ error: 'Einer oder beide Kunden wurden nicht gefunden' })
+    }
+    
+    // Move all vehicles from source to target
+    await prisma.vehicle.updateMany({
+      where: { customerId: source.id },
+      data: { customerId: target.id }
+    })
+    
+    // Move all documents from source to target
+    await prisma.document.updateMany({
+      where: { customerId: source.id },
+      data: { customerId: target.id }
+    })
+    
+    // Move all service records (history) from source to target
+    await prisma.serviceRecord.updateMany({
+      where: { customerId: source.id },
+      data: { customerId: target.id }
+    })
+    
+    // Move all appointments from source to target
+    await prisma.appointment.updateMany({
+      where: { customerId: source.id },
+      data: { customerId: target.id }
+    })
+    
+    // Update target customer with source data if target data is empty and keepTargetData is true
+    if (keepTargetData) {
+      const updateData: any = {}
+      if (!target.phone && source.phone) updateData.phone = source.phone
+      if (!target.email && source.email) updateData.email = source.email
+      if (!target.address && source.address) updateData.address = source.address
+      
+      if (Object.keys(updateData).length > 0) {
+        await prisma.customer.update({
+          where: { id: target.id },
+          data: updateData
+        })
+      }
+    }
+    
+    // Delete the source customer (now empty)
+    await prisma.customer.delete({
+      where: { id: source.id }
+    })
+    
+    // Return the merged customer
+    const mergedCustomer = await prisma.customer.findUnique({
+      where: { id: target.id },
+      include: { vehicles: true, documents: true, history: true, appointments: true }
+    })
+    
+    res.json({ 
+      success: true, 
+      message: `Kunde "${source.firstName} ${source.lastName}" wurde mit "${target.firstName} ${target.lastName}" zusammengeführt`,
+      customer: mergedCustomer
+    })
+  } catch (error) {
+    console.error('Error merging customers:', error)
+    res.status(500).json({ error: 'Fehler beim Zusammenführen der Kunden' })
+  }
+}
+
+// Transfer a vehicle from one customer to another
+export const transferVehicle = async (req: Request, res: Response) => {
+  try {
+    const { vehicleId, targetCustomerId } = req.body
+    
+    if (!vehicleId || !targetCustomerId) {
+      return res.status(400).json({ error: 'Fahrzeug-ID und Ziel-Kunden-ID sind erforderlich' })
+    }
+    
+    // Check if target customer exists
+    const targetCustomer = await prisma.customer.findUnique({
+      where: { id: parseInt(targetCustomerId) }
+    })
+    
+    if (!targetCustomer) {
+      return res.status(404).json({ error: 'Ziel-Kunde nicht gefunden' })
+    }
+    
+    // Get the vehicle
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: parseInt(vehicleId) },
+      include: { customer: true }
+    })
+    
+    if (!vehicle) {
+      return res.status(404).json({ error: 'Fahrzeug nicht gefunden' })
+    }
+    
+    if (vehicle.customerId === parseInt(targetCustomerId)) {
+      return res.status(400).json({ error: 'Fahrzeug gehört bereits diesem Kunden' })
+    }
+    
+    // Transfer the vehicle
+    const updatedVehicle = await prisma.vehicle.update({
+      where: { id: parseInt(vehicleId) },
+      data: { customerId: parseInt(targetCustomerId) },
+      include: { customer: true }
+    })
+    
+    res.json({ 
+      success: true, 
+      message: `Fahrzeug ${vehicle.licensePlate || vehicle.make + ' ' + vehicle.model} wurde zu "${targetCustomer.firstName} ${targetCustomer.lastName}" übertragen`,
+      vehicle: updatedVehicle
+    })
+  } catch (error) {
+    console.error('Error transferring vehicle:', error)
+    res.status(500).json({ error: 'Fehler beim Übertragen des Fahrzeugs' })
+  }
+}
+
+// Search customers (for transfer/merge dialogs)
+export const searchCustomers = async (req: Request, res: Response) => {
+  try {
+    const { query, excludeId } = req.query
+    
+    if (!query || String(query).length < 1) {
+      return res.json([])
+    }
+    
+    const searchTerm = String(query)
+    const excludeCustomerId = excludeId ? parseInt(String(excludeId)) : undefined
+    
+    // Check if search term is a number (customer ID search)
+    const isNumericSearch = /^\d+$/.test(searchTerm.trim())
+    
+    let customers
+    
+    if (isNumericSearch) {
+      // Search by customer ID
+      const customerId = parseInt(searchTerm.trim())
+      const customer = await prisma.customer.findUnique({
+        where: { id: customerId },
+        include: { vehicles: true }
+      })
+      
+      if (customer && (!excludeCustomerId || customer.id !== excludeCustomerId)) {
+        customers = [customer]
+      } else {
+        customers = []
+      }
+    } else {
+      // Normal text search
+      customers = await prisma.customer.findMany({
+        where: {
+          AND: [
+            excludeCustomerId ? { id: { not: excludeCustomerId } } : {},
+            {
+              OR: [
+                { firstName: { contains: searchTerm } },
+                { lastName: { contains: searchTerm } },
+                { phone: { contains: searchTerm } },
+                { email: { contains: searchTerm } },
+                { vehicles: { some: { licensePlate: { contains: searchTerm.toUpperCase() } } } }
+              ]
+            }
+          ]
+        },
+        take: 10,
+        include: { vehicles: true }
+      })
+    }
+    
+    res.json(customers)
+  } catch (error) {
+    console.error('Error searching customers:', error)
+    res.status(500).json({ error: 'Fehler bei der Kundensuche' })
+  }
+}

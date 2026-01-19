@@ -6,12 +6,20 @@ import OpenAI from 'openai'
 import { autoUpdater } from 'electron-updater'
 import { startMobileServer, stopMobileServer } from './mobile-server'
 import { logger, setupLoggerIPC } from './logger'
+import { runMigrations } from './db'
 import { PrismaClient } from '@prisma/client'
 
 // ===== AUTO-UPDATER KONFIGURATION =====
 autoUpdater.logger = logger
 autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = true
+
+// Für private GitHub Repos: Token setzen (aus Umgebungsvariable oder hardcoded für interne Apps)
+// HINWEIS: Für öffentliche Repos ist kein Token nötig
+const GH_TOKEN = process.env.GH_TOKEN || ''
+if (GH_TOKEN) {
+  autoUpdater.requestHeaders = { 'Authorization': `token ${GH_TOKEN}` }
+}
 
 // Initialize Prisma with a fixed location for the DB in production
 const dbPath = is.dev 
@@ -1585,10 +1593,13 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   logger.init()
   setupLoggerIPC()
   logger.info('Application starting...')
+
+  // Run database migrations to ensure all tables exist
+  await runMigrations()
 
   // Set app user model id for windows
   electronApp.setAppUserModelId('de.werkstatt-terhaag.yvi')

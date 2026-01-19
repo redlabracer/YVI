@@ -22,19 +22,57 @@ export default function Settings() {
   const [loading, setLoading] = useState(false)
 
   // Default AI Prompt
-  const defaultAiPrompt = `Analysiere dieses Fahrzeugschein-Dokument (Zulassungsbescheinigung Teil I) und extrahiere folgende Informationen:
+  const defaultAiPrompt = `Analysiere dieses Fahrzeugschein-Dokument (Zulassungsbescheinigung Teil I) und extrahiere die folgenden Informationen.
 
-1. Halter/Besitzer (Name, Vorname)
-2. Adresse (Straße, PLZ, Ort)
-3. Kennzeichen
-4. Fahrzeugidentifikationsnummer (FIN/VIN)
-5. Marke und Modell
-6. HSN (Herstellerschlüsselnummer, 4-stellig)
-7. TSN (Typschlüsselnummer, 3-stellig)
-8. Erstzulassungsdatum
+AUFBAU DES FAHRZEUGSCHEINS (Zulassungsbescheinigung Teil I):
+Die Felder sind mit Buchstaben und Nummern gekennzeichnet:
 
-Gib die Daten im JSON-Format zurück mit folgenden Feldern:
-firstName, lastName, address, licensePlate, vin, make, model, hsn, tsn, firstRegistration (YYYY-MM-DD Format)`
+HALTER-INFORMATIONEN (linke obere Ecke):
+- Feld C.1.1: Familienname oder Firmenname des Halters
+- Feld C.1.2: Vorname(n) des Halters
+- Feld C.1.3: Anschrift (Straße, Hausnummer, PLZ, Ort)
+
+FAHRZEUG-IDENTIFIKATION:
+- Feld A: Amtliches Kennzeichen (z.B. "B-AB 1234")
+- Feld E: Fahrzeug-Identifizierungsnummer (FIN/VIN, 17-stellig, z.B. "WVWZZZ3CZWE123456")
+- Feld B: Datum der Erstzulassung (Format: TT.MM.JJJJ)
+- Feld I: Datum der Zulassung (aktueller Halter)
+
+FAHRZEUGTYP:
+- Feld D.1: Marke/Hersteller (z.B. "VW", "BMW", "Mercedes-Benz")
+- Feld D.2: Typ/Variante/Version (Handelsbezeichnung/Modell, z.B. "Golf", "3er", "A-Klasse")
+- Feld D.3: Handelsbezeichnung(en)
+
+TECHNISCHE SCHLÜSSELNUMMERN (sehr wichtig für Ersatzteile):
+- Feld 2.1: HSN - Herstellerschlüsselnummer (4-stellig, z.B. "0603")
+- Feld 2.2: TSN - Typschlüsselnummer (3-stellig, z.B. "ABC")
+Die HSN/TSN befinden sich im unteren Bereich, oft in einer Zeile formatiert als "2.1 0603 2.2 ABC"
+
+ZUSÄTZLICHE TECHNISCHE DATEN:
+- Feld P.1: Hubraum in cm³
+- Feld P.2/P.4: Leistung in kW
+- Feld V.9: CO2-Emissionen
+- Feld 14/14.1: Farbe
+
+EXTRAHIERE UND GIB ZURÜCK (JSON-Format):
+{
+  "firstName": "Vorname aus C.1.2",
+  "lastName": "Nachname aus C.1.1", 
+  "address": "Komplette Adresse aus C.1.3",
+  "licensePlate": "Kennzeichen aus Feld A",
+  "vin": "FIN aus Feld E (17 Zeichen)",
+  "make": "Marke aus D.1",
+  "model": "Modell/Typ aus D.2 oder D.3",
+  "hsn": "4-stellige HSN aus Feld 2.1",
+  "tsn": "3-stellige TSN aus Feld 2.2",
+  "firstRegistration": "Datum aus Feld B im Format YYYY-MM-DD"
+}
+
+WICHTIG: 
+- HSN ist IMMER 4-stellig (z.B. "0603", "1313", "0005")
+- TSN ist IMMER 3-stellig (z.B. "BHN", "AAK", "960")
+- FIN/VIN ist 17-stellig
+- Gib NUR das JSON zurück, keine zusätzlichen Erklärungen`
 
   // Cloud / Remote Database State
   const [useRemote, setUseRemote] = useState(localStorage.getItem('useRemote') === 'true')

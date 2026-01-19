@@ -14,7 +14,9 @@ import {
   Menu, // Add Menu icon
   Briefcase,
   Wrench,
-  RefreshCw
+  RefreshCw,
+  WifiOff,
+  Wifi
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -28,9 +30,54 @@ export default function Layout() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState('')
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [isConnected, setIsConnected] = useState(true)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
 
   // @ts-ignore
   const isElectron = window.electron !== undefined
+  const useRemote = localStorage.getItem('useRemote') === 'true'
+  const serverUrl = localStorage.getItem('serverUrl') || ''
+
+  // Check server connection periodically
+  useEffect(() => {
+    const checkConnection = async () => {
+      // Only check if using remote server
+      if (!useRemote || !serverUrl) {
+        setIsConnected(true)
+        setConnectionError(null)
+        return
+      }
+
+      try {
+        const response = await fetch(`${serverUrl}/api/settings`, {
+          method: 'GET',
+          headers: {
+            'Authorization': localStorage.getItem('auth') || 'Basic VGVyaGFhZzp0ZXJoYWFn'
+          },
+          signal: AbortSignal.timeout(5000)
+        })
+        
+        if (response.ok) {
+          setIsConnected(true)
+          setConnectionError(null)
+        } else {
+          setIsConnected(false)
+          setConnectionError(`Server antwortet mit Fehler: ${response.status}`)
+        }
+      } catch (err: any) {
+        setIsConnected(false)
+        setConnectionError(err.message || 'Server nicht erreichbar')
+      }
+    }
+
+    // Initial check
+    checkConnection()
+
+    // Check every 30 seconds
+    const interval = setInterval(checkConnection, 30000)
+
+    return () => clearInterval(interval)
+  }, [useRemote, serverUrl])
 
   useEffect(() => {
     // Auto-Sync on startup
@@ -255,6 +302,22 @@ export default function Layout() {
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white truncate">
               {navItems.find(i => i.path === location.pathname)?.label || 'Werkstatt Manager'}
             </h2>
+            
+            {/* Connection Status Warning */}
+            {useRemote && !isConnected && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-xs font-medium animate-pulse">
+                <WifiOff size={14} />
+                <span className="hidden sm:inline">Server nicht erreichbar</span>
+                <span className="sm:hidden">Offline</span>
+              </div>
+            )}
+            
+            {useRemote && isConnected && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-xs font-medium">
+                <Wifi size={12} />
+                <span className="hidden sm:inline">Verbunden</span>
+              </div>
+            )}
           </div>
 
           {/* Search Bar */}

@@ -1150,7 +1150,7 @@ ipcMain.handle('create-backup', async () => {
 })
 
 ipcMain.handle('save-settings', async (_, data) => {
-  const { apiKey, openaiKey, carPartsUser, carPartsPass, conradUser, conradPass, lexwareUser, lexwarePass, theme, autoSync } = data
+  const { apiKey, openaiKey, openaiModel, aiPrompt, carPartsUser, carPartsPass, conradUser, conradPass, lexwareUser, lexwarePass, theme, autoSync } = data
   // Check if settings exist, update or create
   const existing = await prisma.settings.findFirst()
   if (existing) {
@@ -1159,6 +1159,8 @@ ipcMain.handle('save-settings', async (_, data) => {
       data: { 
         ...(apiKey !== undefined && { apiKey }),
         ...(openaiKey !== undefined && { openaiKey }),
+        ...(openaiModel !== undefined && { openaiModel }),
+        ...(aiPrompt !== undefined && { aiPrompt }),
         ...(carPartsUser !== undefined && { carPartsUser }),
         ...(carPartsPass !== undefined && { carPartsPass }),
         ...(conradUser !== undefined && { conradUser }),
@@ -1174,6 +1176,8 @@ ipcMain.handle('save-settings', async (_, data) => {
       data: { 
         apiKey: apiKey || null, 
         openaiKey: openaiKey || null,
+        openaiModel: openaiModel || 'gpt-4o-mini',
+        aiPrompt: aiPrompt || null,
         carPartsUser: carPartsUser || null,
         carPartsPass: carPartsPass || null,
         conradUser: conradUser || null,

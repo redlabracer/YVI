@@ -114,12 +114,15 @@ ipcMain.on('open-carparts-cat', async (_, query) => {
 
   win.loadURL('https://tm1.carparts-cat.com/login/car')
 
-  win.webContents.on('did-finish-load', () => {
+  // Also try on did-navigate-in-page for SPA navigation
+  const runLoginScript = () => {
     const script = `
       (function() {
         const query = "${query || ''}";
         const username = "${username}";
         const password = "${password}";
+        
+        console.log('CarParts AutoLogin: Starting with username:', username ? 'SET' : 'EMPTY');
         
         // Helper to force value update for React/Angular/Vue
         function setNativeValue(element, value) {
@@ -142,37 +145,59 @@ ipcMain.on('open-carparts-cat', async (_, query) => {
         }
 
         function tryLogin() {
-          // 1. Check for Username field (Step 1 or Combined)
-          const userInputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
-          const userInput = userInputs.find(i => 
-            (i.placeholder && i.placeholder.toLowerCase().includes('benutzer')) || 
-            (i.name && i.name.toLowerCase().includes('user')) ||
-            (i.id && i.id.toLowerCase().includes('user'))
-          );
+          console.log('CarParts AutoLogin: tryLogin called');
+          
+          // Find ALL inputs on the page
+          const allInputs = Array.from(document.querySelectorAll('input'));
+          console.log('CarParts AutoLogin: Found', allInputs.length, 'inputs');
+          
+          // 1. Find Username field with broader matching
+          let userInput = allInputs.find(i => {
+            const attrs = (i.name + i.id + i.placeholder + i.className + (i.type || '')).toLowerCase();
+            return attrs.includes('user') || attrs.includes('email') || attrs.includes('login') || attrs.includes('benutzer');
+          });
+          
+          // Fallback: first text/email input that's not password
+          if (!userInput) {
+            userInput = allInputs.find(i => (i.type === 'text' || i.type === 'email' || !i.type) && i.type !== 'password' && i.type !== 'hidden');
+          }
 
-          // 2. Check for Password field
-          const passInput = document.querySelector('input[type="password"]');
+          // 2. Find Password field
+          const passInput = allInputs.find(i => i.type === 'password');
+          
+          console.log('CarParts AutoLogin: userInput found:', !!userInput, 'passInput found:', !!passInput);
 
           if (username && userInput && userInput.value !== username) {
+            console.log('CarParts AutoLogin: Setting username');
             setNativeValue(userInput, username);
             triggerEvents(userInput);
           }
 
           if (password && passInput && passInput.value !== password) {
+            console.log('CarParts AutoLogin: Setting password');
             setNativeValue(passInput, password);
             triggerEvents(passInput);
           }
 
-          // 3. Click Button
+          // 3. Click Button - broader matching
           if ((username && userInput) || (password && passInput)) {
-            const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+            const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], [type="submit"], .btn, .button'));
+            console.log('CarParts AutoLogin: Found', buttons.length, 'buttons');
+            
             const actionBtn = buttons.find(b => {
-              const text = (b.innerText || b.value || '').toLowerCase();
-              return text.includes('weiter') || text.includes('login') || text.includes('anmelden');
+              const text = (b.innerText || b.textContent || b.value || '').toLowerCase();
+              const attrs = (b.className || '').toLowerCase();
+              return text.includes('weiter') || text.includes('login') || text.includes('anmelden') || 
+                     text.includes('einloggen') || text.includes('submit') ||
+                     attrs.includes('submit') || attrs.includes('login');
             });
 
-            if (actionBtn) {
-              setTimeout(() => actionBtn.click(), 500);
+            // Fallback: first visible button
+            const fallbackBtn = actionBtn || buttons.find(b => b.offsetParent !== null);
+
+            if (fallbackBtn) {
+              console.log('CarParts AutoLogin: Clicking button:', fallbackBtn.innerText || fallbackBtn.value);
+              setTimeout(() => fallbackBtn.click(), 500);
             }
           }
         }
@@ -263,8 +288,13 @@ ipcMain.on('open-carparts-cat', async (_, query) => {
         }, 800);
       })();
     `
-    win.webContents.executeJavaScript(script).catch(() => {});
-  })
+    win.webContents.executeJavaScript(script).catch((err) => {
+      console.error('CarParts script error:', err);
+    });
+  }
+  
+  win.webContents.on('did-finish-load', runLoginScript);
+  win.webContents.on('did-navigate', runLoginScript);
 })
 
 ipcMain.handle('select-file', async () => {

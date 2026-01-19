@@ -35,6 +35,8 @@ const Conrad = () => {
           const username = "${credentials.user}";
           const password = "${credentials.pass}";
           
+          console.log('Conrad AutoLogin: Starting with username:', username ? 'SET' : 'EMPTY');
+          
           // Helper to force value update for React/Angular/Vue
           function setNativeValue(element, value) {
             const lastValue = element.value;
@@ -56,38 +58,59 @@ const Conrad = () => {
           }
 
           function tryLogin() {
-            // 1. Check for Username field (Step 1 or Combined)
-            const userInputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type]), input[type="email"]'));
-            const userInput = userInputs.find(i => 
-              (i.placeholder && i.placeholder.toLowerCase().includes('benutzer')) || 
-              (i.name && i.name.toLowerCase().includes('user')) ||
-              (i.id && i.id.toLowerCase().includes('user')) ||
-              (i.type === 'email')
-            );
+            console.log('Conrad AutoLogin: tryLogin called');
+            
+            // Find ALL inputs on the page
+            const allInputs = Array.from(document.querySelectorAll('input'));
+            console.log('Conrad AutoLogin: Found', allInputs.length, 'inputs');
+            
+            // 1. Find Username field with broader matching
+            let userInput = allInputs.find(i => {
+              const attrs = (i.name + i.id + i.placeholder + i.className + (i.type || '')).toLowerCase();
+              return attrs.includes('user') || attrs.includes('email') || attrs.includes('login') || attrs.includes('benutzer');
+            });
+            
+            // Fallback: first text/email input that's not password
+            if (!userInput) {
+              userInput = allInputs.find(i => (i.type === 'text' || i.type === 'email' || !i.type) && i.type !== 'password' && i.type !== 'hidden');
+            }
 
-            // 2. Check for Password field
-            const passInput = document.querySelector('input[type="password"]');
+            // 2. Find Password field
+            const passInput = allInputs.find(i => i.type === 'password');
+            
+            console.log('Conrad AutoLogin: userInput found:', !!userInput, 'passInput found:', !!passInput);
 
             if (username && userInput && userInput.value !== username) {
+              console.log('Conrad AutoLogin: Setting username');
               setNativeValue(userInput, username);
               triggerEvents(userInput);
             }
 
             if (password && passInput && passInput.value !== password) {
+              console.log('Conrad AutoLogin: Setting password');
               setNativeValue(passInput, password);
               triggerEvents(passInput);
             }
 
-            // 3. Click Button
+            // 3. Click Button - broader matching
             if ((username && userInput) || (password && passInput)) {
-              const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+              const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], [type="submit"], .btn, .button'));
+              console.log('Conrad AutoLogin: Found', buttons.length, 'buttons');
+              
               const actionBtn = buttons.find(b => {
-                const text = (b.innerText || b.value || '').toLowerCase();
-                return text.includes('weiter') || text.includes('login') || text.includes('anmelden');
+                const text = (b.innerText || b.textContent || b.value || '').toLowerCase();
+                const attrs = (b.className || '').toLowerCase();
+                return text.includes('weiter') || text.includes('login') || text.includes('anmelden') || 
+                       text.includes('einloggen') || text.includes('submit') ||
+                       attrs.includes('submit') || attrs.includes('login');
               });
 
-              if (actionBtn) {
-                setTimeout(() => actionBtn.click(), 500);
+              // Fallback: first visible button
+              const fallbackBtn = actionBtn || buttons.find(b => b.offsetParent !== null);
+
+              if (fallbackBtn) {
+                console.log('Conrad AutoLogin: Clicking button:', fallbackBtn.innerText || fallbackBtn.value);
+                setTimeout(() => fallbackBtn.click(), 500);
               }
             }
           }

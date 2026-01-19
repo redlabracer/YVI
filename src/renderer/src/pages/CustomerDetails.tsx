@@ -1068,7 +1068,7 @@ export default function CustomerDetails() {
                               if (confirm(`Fahrzeug "${vehicle.make} ${vehicle.model}" wirklich löschen?`)) {
                                 try {
                                   await api.vehicles.delete(vehicle.id)
-                                  loadCustomer()
+                                  if (id) loadCustomer(id)
                                 } catch (err) {
                                   console.error('Error deleting vehicle:', err)
                                   alert('Fehler beim Löschen des Fahrzeugs')

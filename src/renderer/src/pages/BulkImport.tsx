@@ -1,14 +1,18 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Upload, FileText, Users, CheckCircle, XCircle, Loader2, 
-  ArrowLeft, Play, Trash2, AlertTriangle, Eye, EyeOff
+  ArrowLeft, Play, Trash2, AlertTriangle, Eye, EyeOff, StopCircle, Key
 } from 'lucide-react'
 import { api } from '../api'
 
+// Storage key for persisting import state
+const STORAGE_KEY = 'bulk-import-state'
+
 interface FileEntry {
   id: string
-  file: File
+  file?: File // Optional because we can't serialize File objects
+  fileData?: string // Base64 encoded file data for persistence
   name: string
   status: 'pending' | 'analyzing' | 'success' | 'error'
   result?: {
@@ -27,14 +31,94 @@ interface FileEntry {
   customerId?: number
 }
 
+interface PersistedState {
+  files: Omit<FileEntry, 'file'>[]
+  autoCreate: boolean
+  showPreview: boolean
+}
+
+// Helper to convert File to base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = error => reject(error)
+  })
+}
+
+// Helper to convert base64 to File
+const base64ToFile = (base64: string, filename: string): File => {
+  const arr = base64.split(',')
+  const mime = arr[0].match(/:(.*?);/)?.[1] || 'application/octet-stream'
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new File([u8arr], filename, { type: mime })
+}
+
 export default function BulkImport() {
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const [files, setFiles] = useState<FileEntry[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [showPreview, setShowPreview] = useState(true)
   const [autoCreate, setAutoCreate] = useState(false)
+  const [apiKeyMissing, setApiKeyMissing] = useState(false)
+  const [isCancelled, setIsCancelled] = useState(false)
+
+  // Load persisted state on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      try {
+        const state: PersistedState = JSON.parse(saved)
+        // Restore files (convert base64 back to File objects for pending files)
+        const restoredFiles = state.files.map(f => {
+          if (f.fileData && f.status === 'pending') {
+            return { ...f, file: base64ToFile(f.fileData, f.name) }
+          }
+          return f
+        })
+        setFiles(restoredFiles as FileEntry[])
+        setAutoCreate(state.autoCreate)
+        setShowPreview(state.showPreview)
+      } catch (err) {
+        console.error('Error restoring bulk import state:', err)
+      }
+    }
+  }, [])
+
+  // Persist state on changes
+  useEffect(() => {
+    const persistState = async () => {
+      // Convert File objects to base64 for pending files
+      const filesToPersist: Omit<FileEntry, 'file'>[] = await Promise.all(
+        files.map(async f => {
+          const { file, ...rest } = f
+          if (file && f.status === 'pending') {
+            const fileData = await fileToBase64(file)
+            return { ...rest, fileData }
+          }
+          return rest
+        })
+      )
+      
+      const state: PersistedState = {
+        files: filesToPersist,
+        autoCreate,
+        showPreview
+      }
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    }
+    
+    persistState()
+  }, [files, autoCreate, showPreview])
   
   // Stats
   const totalFiles = files.length
@@ -67,10 +151,20 @@ export default function BulkImport() {
 
   const handleClearAll = () => {
     setFiles([])
+    sessionStorage.removeItem(STORAGE_KEY)
   }
 
   const analyzeFile = async (entry: FileEntry): Promise<FileEntry> => {
     try {
+      // Check if file exists
+      if (!entry.file) {
+        return {
+          ...entry,
+          status: 'error',
+          error: 'Datei nicht mehr verfügbar. Bitte erneut hochladen.'
+        }
+      }
+      
       // Analyze with customer data extraction enabled
       const result = await api.documents.analyze(entry.file, true)
       
@@ -135,11 +229,22 @@ export default function BulkImport() {
   const handleStartAnalysis = async () => {
     if (isProcessing || pendingCount === 0) return
     
+    // Reset cancelled state
+    setIsCancelled(false)
+    setApiKeyMissing(false)
     setIsProcessing(true)
+    
+    // Create new abort controller
+    abortControllerRef.current = new AbortController()
     
     const pendingFiles = files.filter(f => f.status === 'pending')
     
     for (let i = 0; i < pendingFiles.length; i++) {
+      // Check if cancelled
+      if (abortControllerRef.current?.signal.aborted) {
+        break
+      }
+      
       const entry = pendingFiles[i]
       setCurrentIndex(files.findIndex(f => f.id === entry.id))
       
@@ -150,6 +255,20 @@ export default function BulkImport() {
 
       // Analyze the file
       const analyzedEntry = await analyzeFile(entry)
+      
+      // Check for API key error
+      if (analyzedEntry.status === 'error' && 
+          (analyzedEntry.error?.toLowerCase().includes('api') || 
+           analyzedEntry.error?.toLowerCase().includes('key') ||
+           analyzedEntry.error?.toLowerCase().includes('unauthorized') ||
+           analyzedEntry.error?.toLowerCase().includes('401'))) {
+        setApiKeyMissing(true)
+        // Revert to pending so user can retry after adding key
+        setFiles(prev => prev.map(f => 
+          f.id === entry.id ? { ...f, status: 'pending', error: undefined } : f
+        ))
+        break
+      }
       
       // If auto-create is enabled and analysis was successful, create customer
       if (autoCreate && analyzedEntry.status === 'success') {
@@ -170,6 +289,19 @@ export default function BulkImport() {
 
     setIsProcessing(false)
     setCurrentIndex(-1)
+    abortControllerRef.current = null
+  }
+
+  const handleCancelAnalysis = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      setIsCancelled(true)
+      
+      // Revert any "analyzing" files back to "pending"
+      setFiles(prev => prev.map(f => 
+        f.status === 'analyzing' ? { ...f, status: 'pending' } : f
+      ))
+    }
   }
 
   const handleCreateAllCustomers = async () => {
@@ -290,29 +422,65 @@ export default function BulkImport() {
               {showPreview ? 'Details ausblenden' : 'Details anzeigen'}
             </button>
 
-            <button
-              onClick={handleStartAnalysis}
-              disabled={isProcessing || pendingCount === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Analysiere... ({currentIndex + 1}/{files.length})
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4" />
-                  Analyse starten ({pendingCount})
-                </>
-              )}
-            </button>
+            {isProcessing ? (
+              <button
+                onClick={handleCancelAnalysis}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <StopCircle className="w-4 h-4" />
+                Abbrechen
+              </button>
+            ) : (
+              <button
+                onClick={handleStartAnalysis}
+                disabled={pendingCount === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Play className="w-4 h-4" />
+                Analyse starten ({pendingCount})
+              </button>
+            )}
           </div>
         </div>
+
+        {/* API Key Warning */}
+        {apiKeyMissing && (
+          <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3">
+            <Key className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                OpenAI API-Schlüssel fehlt oder ungültig
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Bitte gehen Sie zu den Einstellungen und hinterlegen Sie einen gültigen OpenAI API-Schlüssel, um die KI-Analyse zu verwenden.
+              </p>
+              <button
+                onClick={() => navigate('/settings')}
+                className="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 underline"
+              >
+                Zu den Einstellungen →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cancelled Message */}
+        {isCancelled && !isProcessing && (
+          <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Import wurde abgebrochen. {pendingCount} Dateien noch ausstehend - Sie können jederzeit fortfahren.
+            </p>
+          </div>
+        )}
 
         {/* Progress Bar */}
         {isProcessing && (
           <div className="mt-4">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <span>Verarbeite: {currentIndex + 1} von {files.length}</span>
+              <span>{Math.round(((totalFiles - pendingCount) / totalFiles) * 100)}%</span>
+            </div>
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-blue-600 transition-all duration-300"

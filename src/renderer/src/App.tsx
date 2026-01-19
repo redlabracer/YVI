@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import Customers from './pages/Customers'
 import CustomerDetails from './pages/CustomerDetails'
 import CreateCustomer from './pages/CreateCustomer'
+import BulkImport from './pages/BulkImport'
 import Settings from './pages/Settings'
 import ServiceTemplates from './pages/ServiceTemplates'
 import Calendar from './pages/Calendar'
@@ -20,6 +21,7 @@ function App(): JSX.Element {
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
             <Route path="create-customer" element={<CreateCustomer />} />
+            <Route path="bulk-import" element={<BulkImport />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customer/:id" element={<CustomerDetails />} />
             <Route path="settings" element={<Settings />} />

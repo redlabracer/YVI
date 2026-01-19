@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, User, Phone, MapPin, Car, ChevronRight } from 'lucide-react'
+import { Search, Plus, User, Phone, MapPin, Car, ChevronRight, Upload } from 'lucide-react'
 import { api } from '../api'
 
 export default function Customers() {
@@ -36,13 +36,23 @@ export default function Customers() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Kundenstamm</h1>
           <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mt-1 hidden sm:block">Verwalten Sie Ihre Kunden und deren Fahrzeuge</p>
         </div>
-        <button 
-          onClick={() => navigate('/create-customer')}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none w-full sm:w-auto"
-        >
-          <Plus size={18} />
-          Neuer Kunde
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => navigate('/bulk-import')}
+            className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all text-sm font-medium flex items-center justify-center gap-2 flex-1 sm:flex-none"
+          >
+            <Upload size={18} />
+            <span className="hidden sm:inline">Massen-Import</span>
+            <span className="sm:hidden">Import</span>
+          </button>
+          <button 
+            onClick={() => navigate('/create-customer')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all text-sm font-medium flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none flex-1 sm:flex-none"
+          >
+            <Plus size={18} />
+            Neuer Kunde
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">

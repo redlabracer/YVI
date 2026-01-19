@@ -31,7 +31,6 @@ export default function Layout() {
   const [syncMessage, setSyncMessage] = useState('')
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(true)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
 
   // @ts-ignore
   const isElectron = window.electron !== undefined
@@ -44,7 +43,6 @@ export default function Layout() {
       // Only check if using remote server
       if (!useRemote || !serverUrl) {
         setIsConnected(true)
-        setConnectionError(null)
         return
       }
 
@@ -59,14 +57,11 @@ export default function Layout() {
         
         if (response.ok) {
           setIsConnected(true)
-          setConnectionError(null)
         } else {
           setIsConnected(false)
-          setConnectionError(`Server antwortet mit Fehler: ${response.status}`)
         }
       } catch (err: any) {
         setIsConnected(false)
-        setConnectionError(err.message || 'Server nicht erreichbar')
       }
     }
 

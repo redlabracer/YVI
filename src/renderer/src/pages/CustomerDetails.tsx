@@ -138,7 +138,10 @@ export default function CustomerDetails() {
   const handleDeleteCustomer = async () => {
     if(!confirm('Wirklich löschen?')) return;
     try {
-        await api.customers.delete(customer.id)
+        const result = await api.customers.delete(customer.id)
+        if (result.lexwareWarning) {
+          alert(result.lexwareWarning)
+        }
         navigate('/customers')
     } catch(err) {
         console.error(err)
@@ -175,7 +178,14 @@ export default function CustomerDetails() {
     
     try {
       const result = await api.customers.merge(selectedCustomer.id, customer.id, true)
-      alert(result.message)
+      let message = result.message
+      if (result.lexwareUpdateResult) {
+        message += '\n\n' + result.lexwareUpdateResult
+      }
+      if (result.lexwareWarning) {
+        message += '\n\n⚠️ ' + result.lexwareWarning
+      }
+      alert(message)
       navigate(`/customer/${selectedCustomer.id}`)
     } catch (err: any) {
       console.error(err)

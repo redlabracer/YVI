@@ -4,7 +4,7 @@ import prisma from '../db';
 export const globalSearch = async (req: Request, res: Response) => {
   try {
     const { q } = req.query;
-    const query = String(q || '');
+    const query = String(q || '').trim();
 
     if (!query || query.length < 2) {
       return res.json([]);
@@ -12,14 +12,19 @@ export const globalSearch = async (req: Request, res: Response) => {
 
     const results: any[] = [];
 
+    // Split search query into words for multi-word search
+    const searchTerms = query.split(/\s+/).filter(term => term.length > 0);
+
     // Search Customers
     const customers = await prisma.customer.findMany({
       where: {
-        OR: [
-          { firstName: { contains: query } },
-          { lastName: { contains: query } },
-          { phone: { contains: query } }
-        ]
+        AND: searchTerms.map(term => ({
+          OR: [
+            { firstName: { contains: term } },
+            { lastName: { contains: term } },
+            { phone: { contains: term } }
+          ]
+        }))
       },
       take: 5
     });
@@ -37,12 +42,14 @@ export const globalSearch = async (req: Request, res: Response) => {
     // Search Vehicles
     const vehicles = await prisma.vehicle.findMany({
       where: {
-        OR: [
-          { licensePlate: { contains: query } },
-          { vin: { contains: query } },
-          { make: { contains: query } },
-          { model: { contains: query } }
-        ]
+        AND: searchTerms.map(term => ({
+          OR: [
+            { licensePlate: { contains: term } },
+            { vin: { contains: term } },
+            { make: { contains: term } },
+            { model: { contains: term } }
+          ]
+        }))
       },
       include: { customer: true },
       take: 5

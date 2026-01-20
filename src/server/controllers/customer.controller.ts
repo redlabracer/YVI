@@ -140,6 +140,17 @@ export const deleteCustomer = async (req: Request, res: Response) => {
     const { id } = req.params
     const customerId = parseInt(id)
     
+    // Get customer first to check for lexwareId
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId }
+    })
+    
+    if (!customer) {
+      return res.status(404).json({ error: 'Kunde nicht gefunden' })
+    }
+    
+    const hadLexwareId = !!customer.lexwareId
+    
     // Delete related records first to avoid foreign key constraint errors
     // Delete documents
     await prisma.document.deleteMany({
@@ -165,7 +176,12 @@ export const deleteCustomer = async (req: Request, res: Response) => {
     await prisma.customer.delete({
       where: { id: customerId }
     })
-    res.json({ success: true })
+    
+    // Return success with Lexware warning if applicable
+    res.json({ 
+      success: true,
+      lexwareWarning: hadLexwareId ? 'Der Kunde war mit Lexware verknüpft. Bitte löschen Sie den Kontakt auch manuell in Lexware Office, da die API keine Löschung unterstützt.' : null
+    })
   } catch (error) {
     console.error('Error deleting customer:', error)
     res.status(500).json({ error: 'Fehler beim Löschen' })
@@ -320,6 +336,57 @@ export const mergeCustomers = async (req: Request, res: Response) => {
       data: { customerId: target.id }
     })
     
+    // Handle Lexware ID transfer: If source has lexwareId and target doesn't, transfer it
+    let lexwareUpdateResult = null
+    let lexwareWarning = null
+    
+    if (source.lexwareId && !target.lexwareId) {
+      // Transfer lexwareId from source to target
+      await prisma.customer.update({
+        where: { id: target.id },
+        data: { lexwareId: source.lexwareId }
+      })
+      
+      // Update the contact in Lexware with the new customer data
+      try {
+        const settings = await prisma.settings.findFirst()
+        if (settings?.apiKey) {
+          const lexwareResponse = await fetch(`https://api.lexware.io/v1/contacts/${source.lexwareId}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${settings.apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              version: 0, // Will be fetched and updated
+              roles: { customer: {} },
+              person: {
+                firstName: target.firstName,
+                lastName: target.lastName
+              },
+              ...(target.email ? { emailAddresses: { business: [target.email] } } : {}),
+              ...(target.phone ? { phoneNumbers: { business: [target.phone] } } : {})
+            })
+          })
+          
+          if (lexwareResponse.ok) {
+            lexwareUpdateResult = 'Lexware Kontakt wurde aktualisiert'
+          } else {
+            lexwareWarning = 'Lexware Kontakt konnte nicht automatisch aktualisiert werden. Bitte manuell in Lexware prüfen.'
+          }
+        }
+      } catch (lexwareError) {
+        console.error('Error updating Lexware contact:', lexwareError)
+        lexwareWarning = 'Lexware Kontakt konnte nicht automatisch aktualisiert werden. Bitte manuell in Lexware prüfen.'
+      }
+    } else if (source.lexwareId && target.lexwareId) {
+      // Both have lexwareIds - warn user that manual merge in Lexware is needed
+      lexwareWarning = 'Beide Kunden waren mit unterschiedlichen Lexware-Kontakten verknüpft. Bitte führen Sie die Kontakte auch manuell in Lexware Office zusammen.'
+    } else if (source.lexwareId) {
+      lexwareWarning = 'Der gelöschte Kunde war mit Lexware verknüpft. Bitte löschen Sie den Kontakt manuell in Lexware Office.'
+    }
+    
     // Update target customer with source data if target data is empty and keepTargetData is true
     if (keepTargetData) {
       const updateData: any = {}
@@ -349,7 +416,9 @@ export const mergeCustomers = async (req: Request, res: Response) => {
     res.json({ 
       success: true, 
       message: `Kunde "${source.firstName} ${source.lastName}" wurde mit "${target.firstName} ${target.lastName}" zusammengeführt`,
-      customer: mergedCustomer
+      customer: mergedCustomer,
+      lexwareUpdateResult,
+      lexwareWarning
     })
   } catch (error) {
     console.error('Error merging customers:', error)
@@ -416,17 +485,17 @@ export const searchCustomers = async (req: Request, res: Response) => {
       return res.json([])
     }
     
-    const searchTerm = String(query)
+    const searchTerm = String(query).trim()
     const excludeCustomerId = excludeId ? parseInt(String(excludeId)) : undefined
     
     // Check if search term is a number (customer ID search)
-    const isNumericSearch = /^\d+$/.test(searchTerm.trim())
+    const isNumericSearch = /^\d+$/.test(searchTerm)
     
     let customers
     
     if (isNumericSearch) {
       // Search by customer ID
-      const customerId = parseInt(searchTerm.trim())
+      const customerId = parseInt(searchTerm)
       const customer = await prisma.customer.findUnique({
         where: { id: customerId },
         include: { vehicles: true }
@@ -438,20 +507,23 @@ export const searchCustomers = async (req: Request, res: Response) => {
         customers = []
       }
     } else {
-      // Normal text search
+      // Split search into words for multi-word search (e.g. "Max Mustermann")
+      const searchTerms = searchTerm.split(/\s+/).filter(term => term.length > 0)
+      
+      // Normal text search - all terms must match
       customers = await prisma.customer.findMany({
         where: {
           AND: [
             excludeCustomerId ? { id: { not: excludeCustomerId } } : {},
-            {
+            ...searchTerms.map(term => ({
               OR: [
-                { firstName: { contains: searchTerm } },
-                { lastName: { contains: searchTerm } },
-                { phone: { contains: searchTerm } },
-                { email: { contains: searchTerm } },
-                { vehicles: { some: { licensePlate: { contains: searchTerm.toUpperCase() } } } }
+                { firstName: { contains: term } },
+                { lastName: { contains: term } },
+                { phone: { contains: term } },
+                { email: { contains: term } },
+                { vehicles: { some: { licensePlate: { contains: term.toUpperCase() } } } }
               ]
-            }
+            }))
           ]
         },
         take: 10,

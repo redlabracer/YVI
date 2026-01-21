@@ -1824,10 +1824,20 @@ app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('de.werkstatt-terhaag.yvi')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+  // Enable F12 to open DevTools in all modes (not just development)
   app.on('browser-window-created', (_, window) => {
+    // Allow F12 and Ctrl+Shift+I to open DevTools
+    window.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12' && input.type === 'keyDown') {
+        window.webContents.toggleDevTools()
+        event.preventDefault()
+      }
+      // Also allow Ctrl+Shift+I
+      if (input.control && input.shift && input.key.toLowerCase() === 'i' && input.type === 'keyDown') {
+        window.webContents.toggleDevTools()
+        event.preventDefault()
+      }
+    })
     optimizer.watchWindowShortcuts(window)
   })
 

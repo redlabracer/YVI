@@ -50,10 +50,8 @@ const request = async (endpoint: string, method = 'GET', body?: any) => {
   const auth = localStorage.getItem('auth');
   if (auth) {
       headers['Authorization'] = auth;
-  } else {
-      // Fallback für Entwicklung/Setup (Terhaag:terhaag)
-      headers['Authorization'] = 'Basic VGVyaGFhZzp0ZXJoYWFn'; 
   }
+  // Security: No fallback credentials - user must authenticate
 
   const response = await fetch(url, {
     method,

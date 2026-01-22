@@ -2,8 +2,25 @@ import { Router } from 'express'
 import multer from 'multer'
 import { join, extname } from 'path'
 import fs from 'fs'
+import crypto from 'crypto'
 
 const router = Router()
+
+// Security: Allowed file types (whitelist)
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain'
+]
+
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt']
 
 // Configure storage
 const storage = multer.diskStorage({
@@ -16,13 +33,32 @@ const storage = multer.diskStorage({
     cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
-    // Generate unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-    cb(null, file.fieldname + '-' + uniqueSuffix + extname(file.originalname))
+    // Security: Generate cryptographically secure random filename
+    const uniqueSuffix = crypto.randomUUID()
+    const ext = extname(file.originalname).toLowerCase()
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext)
   }
 })
 
-const upload = multer({ storage })
+// Security: File filter to validate file types
+const fileFilter = (req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const ext = extname(file.originalname).toLowerCase()
+  
+  if (ALLOWED_MIME_TYPES.includes(file.mimetype) && ALLOWED_EXTENSIONS.includes(ext)) {
+    cb(null, true)
+  } else {
+    cb(new Error(`Dateityp nicht erlaubt: ${file.mimetype} (${ext}). Erlaubt: ${ALLOWED_EXTENSIONS.join(', ')}`))
+  }
+}
+
+const upload = multer({ 
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max file size
+    files: 10 // Max 10 files per request
+  }
+})
 
 // POST /api/upload
 router.post('/', upload.single('file'), (req, res) => {

@@ -85,7 +85,17 @@ ipcMain.handle('install-update', () => {
 })
 
 ipcMain.on('open-external', (_, url) => {
-  shell.openExternal(url)
+  // Security: Only allow http and https protocols
+  try {
+    const parsedUrl = new URL(url)
+    if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+      shell.openExternal(url)
+    } else {
+      logger.warn('Blocked external URL with unsafe protocol', { url, protocol: parsedUrl.protocol })
+    }
+  } catch (error) {
+    logger.error('Invalid URL provided to open-external', { url, error })
+  }
 })
 
 ipcMain.on('open-carparts-cat', async (_, query) => {
@@ -116,11 +126,12 @@ ipcMain.on('open-carparts-cat', async (_, query) => {
 
   // Also try on did-navigate-in-page for SPA navigation
   const runLoginScript = () => {
+    // Security: Use JSON.stringify for safe credential injection
     const script = `
       (function() {
-        const query = "${query || ''}";
-        const username = "${username}";
-        const password = "${password}";
+        const query = ${JSON.stringify(query || '')};
+        const username = ${JSON.stringify(username)};
+        const password = ${JSON.stringify(password)};
         
         console.log('CarParts AutoLogin: Starting with username:', username ? 'SET' : 'EMPTY');
         
@@ -1776,18 +1787,20 @@ function createWindow(): void {
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      webSecurity: false, // Allow loading local files
-      webviewTag: true
+      sandbox: true,
+      webSecurity: true,
+      webviewTag: false,
+      contextIsolation: true,
+      nodeIntegration: false
     }
   })
 
-  // Remove restrictive CSP to allow connections to remote servers
+  // Secure Content Security Policy
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * 'self' ws: wss: http: https:; frame-src * 'self' https:; img-src * 'self' data: blob: http: https:; font-src * 'self' data:;"]
+        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* ws://localhost:*; img-src 'self' data: blob:; font-src 'self' data:;"]
       }
     })
   })

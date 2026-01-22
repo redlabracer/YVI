@@ -52,9 +52,16 @@ app.get('/', (_req, res) => {
 
 // --- SICHERHEIT: Passwortschutz (Basic Auth) NUR FÜR API ---
 // Damit niemand Fremdes auf Ihre Daten zugreifen kann
+// SECURITY: Credentials must be set via environment variables
 app.use('/api', (req, res, next) => {
-  const validUser = process.env.AUTH_USER || 'Terhaag'
-  const validPass = process.env.AUTH_PASS || 'terhaag'
+  const validUser = process.env.AUTH_USER
+  const validPass = process.env.AUTH_PASS
+  
+  // Security: Require environment variables to be set
+  if (!validUser || !validPass) {
+    console.error('SECURITY ERROR: AUTH_USER and AUTH_PASS environment variables must be set!')
+    return res.status(500).send('Server nicht korrekt konfiguriert. Bitte AUTH_USER und AUTH_PASS setzen.')
+  }
 
   const authHeader = req.headers.authorization
   

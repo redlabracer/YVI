@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import { join } from 'path'
+import { config } from 'dotenv'
 import customerRoutes from './routes/customer.routes'
 import vehicleRoutes from './routes/vehicle.routes'
 import appointmentRoutes from './routes/appointment.routes'
@@ -13,6 +14,9 @@ import todoRoutes from './routes/todo.routes'
 import shopRoutes from './routes/shop.routes'
 import dashboardRoutes from './routes/dashboard.routes'
 import documentRoutes from './routes/document.routes'
+
+// Load environment variables from .env file
+config()
 
 const app = express()
 const PORT = process.env.PORT || 3000

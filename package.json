@@ -1,6 +1,6 @@
 {
   "name": "kfz-werkstatt-app",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "KFZ Werkstatt Management Software",
   "main": "./out/main/index.js",
   "author": "redlabracer",
@@ -28,6 +28,7 @@
     "axios": "^1.13.2",
     "clsx": "^2.1.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "electron-updater": "^6.7.3",
     "express": "^5.2.1",
     "keytar": "^7.9.0",

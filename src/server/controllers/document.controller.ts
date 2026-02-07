@@ -152,6 +152,37 @@ Instruction: Do not extract. This information is not present on the registration
     const content = response.choices[0].message.content;
     const result = JSON.parse(content || '{}');
 
+    // Helper function to convert text to Proper Case (Title Case)
+    const toProperCase = (str: string): string => {
+      if (!str) return str;
+      return str
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    };
+
+    // Normalize names and address to Proper Case (KI returns sometimes CAPS)
+    if (result.firstName) {
+      result.firstName = toProperCase(result.firstName);
+    }
+    if (result.lastName) {
+      result.lastName = toProperCase(result.lastName);
+    }
+    if (result.address) {
+      result.address = toProperCase(result.address);
+    }
+    if (result.make) {
+      result.make = toProperCase(result.make);
+    }
+    if (result.model) {
+      result.model = result.model.toUpperCase(); // Model names often uppercase (e.g. GOLF, SORENTO)
+    }
+    // License plate should be uppercase
+    if (result.licensePlate) {
+      result.licensePlate = result.licensePlate.toUpperCase().replace(/\s+/g, ' ').trim();
+    }
+
     // Clean up uploaded file after processing
     fs.unlinkSync(file.path);
 

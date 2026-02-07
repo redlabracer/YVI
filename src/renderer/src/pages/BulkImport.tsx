@@ -140,7 +140,9 @@ export default function BulkImport() {
   const totalFiles = files.length
   const successCount = files.filter(f => f.status === 'success').length
   const errorCount = files.filter(f => f.status === 'error').length
+  const duplicateCount = files.filter(f => f.status === 'duplicate').length
   const pendingCount = files.filter(f => f.status === 'pending').length
+  const analyzedCount = successCount + duplicateCount
 
   // Separate handler for Electron native file dialog
   const handleElectronFileSelect = async () => {
@@ -249,13 +251,22 @@ export default function BulkImport() {
     try {
       // Check for duplicates first (unless skipped)
       if (!skipDuplicateCheck) {
+        console.log('Checking for duplicates:', {
+          firstName: entry.result.firstName,
+          lastName: entry.result.lastName,
+          licensePlate: entry.result.licensePlate
+        })
+        
         const duplicateCheck = await api.customers.checkDuplicate({
           firstName: entry.result.firstName,
           lastName: entry.result.lastName,
           licensePlate: entry.result.licensePlate
         })
         
+        console.log('Duplicate check result:', duplicateCheck)
+        
         if (duplicateCheck.isDuplicate && duplicateCheck.matches?.length > 0) {
+          console.log('Duplicate found! Showing modal...')
           // Show duplicate modal and wait for user decision
           return new Promise((resolve) => {
             setCurrentDuplicateEntry(entry)
@@ -367,6 +378,9 @@ export default function BulkImport() {
     
     const pendingFiles = files.filter(f => f.status === 'pending')
     
+    // Track analyzed entries in this session for duplicate detection
+    const analyzedInSession: FileEntry[] = [...files.filter(f => f.status === 'success' && f.result)]
+    
     for (let i = 0; i < pendingFiles.length; i++) {
       // Check if cancelled
       if (abortControllerRef.current?.signal.aborted) {
@@ -402,6 +416,26 @@ export default function BulkImport() {
           f.id === entry.id ? { ...f, status: 'pending', error: undefined } : f
         ))
         break
+      }
+      
+      // Check for in-session duplicates (same data from different files in this import)
+      if (analyzedEntry.status === 'success' && analyzedEntry.result) {
+        const inSessionDuplicate = analyzedInSession.find(f => 
+          (f.result?.licensePlate && analyzedEntry.result?.licensePlate && 
+           f.result.licensePlate.replace(/\s/g, '').toUpperCase() === analyzedEntry.result?.licensePlate?.replace(/\s/g, '').toUpperCase()) ||
+          (f.result?.firstName && f.result?.lastName && 
+           f.result.firstName.toLowerCase() === analyzedEntry.result?.firstName?.toLowerCase() &&
+           f.result.lastName.toLowerCase() === analyzedEntry.result?.lastName?.toLowerCase())
+        )
+        
+        if (inSessionDuplicate) {
+          analyzedEntry.status = 'duplicate'
+          analyzedEntry.error = `Duplikat von "${inSessionDuplicate.name}" (gleiche Daten bereits in dieser Import-Liste)`
+          analyzedEntry.duplicateInfo = { matches: [] }
+        } else {
+          // Add to session tracking for future duplicate checks
+          analyzedInSession.push(analyzedEntry)
+        }
       }
       
       // If auto-create is enabled and analysis was successful, create customer
@@ -483,9 +517,14 @@ export default function BulkImport() {
           <span className="text-gray-500 dark:text-gray-400">
             {totalFiles} Dateien
           </span>
-          {successCount > 0 && (
+          {analyzedCount > 0 && (
             <span className="text-green-600 dark:text-green-400">
-              • {successCount} analysiert
+              • {analyzedCount} analysiert
+            </span>
+          )}
+          {duplicateCount > 0 && (
+            <span className="text-amber-600 dark:text-amber-400">
+              • {duplicateCount} Duplikate
             </span>
           )}
           {createdCount > 0 && (
@@ -658,6 +697,9 @@ export default function BulkImport() {
                       {entry.status === 'error' && (
                         <XCircle className="w-6 h-6 text-red-600" />
                       )}
+                      {entry.status === 'duplicate' && (
+                        <AlertTriangle className="w-6 h-6 text-amber-500" />
+                      )}
                     </div>
 
                     {/* Content */}
@@ -671,6 +713,11 @@ export default function BulkImport() {
                             Kunde #{entry.customerId}
                           </span>
                         )}
+                        {entry.status === 'duplicate' && (
+                          <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs rounded-full">
+                            Duplikat
+                          </span>
+                        )}
                       </div>
 
                       {/* Error Message */}
@@ -680,9 +727,17 @@ export default function BulkImport() {
                           {entry.error}
                         </div>
                       )}
+                      
+                      {/* Duplicate Warning */}
+                      {entry.status === 'duplicate' && entry.error && (
+                        <div className="mt-2 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="w-4 h-4" />
+                          {entry.error}
+                        </div>
+                      )}
 
                       {/* Result Preview */}
-                      {showPreview && entry.status === 'success' && entry.result && (
+                      {showPreview && (entry.status === 'success' || entry.status === 'duplicate') && entry.result && (
                         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
                           <div className="bg-gray-50 dark:bg-gray-700/50 rounded p-2">
                             <span className="text-gray-500 dark:text-gray-400 text-xs">Name</span>

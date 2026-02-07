@@ -179,8 +179,11 @@ export default function CreateCustomer() {
           firstName: formData.firstName,
           lastName: formData.lastName,
           phone: formData.phone,
+          email: (formData as any).email, // Include email in check
           licensePlate: formData.licensePlate
         })
+        
+        console.log('Duplicate check result:', duplicateCheck)
         
         if (duplicateCheck.isDuplicate && duplicateCheck.matches.length > 0) {
           setDuplicateMatches(duplicateCheck.matches)
@@ -190,7 +193,12 @@ export default function CreateCustomer() {
         }
       } catch (err) {
         console.error('Duplicate check failed:', err)
-        // Continue with creation if check fails
+        // Show warning but allow user to continue
+        const proceed = confirm('Duplikat-Prüfung fehlgeschlagen. Trotzdem fortfahren?')
+        if (!proceed) {
+          setIsCheckingDuplicate(false)
+          return
+        }
       }
       setIsCheckingDuplicate(false)
     }

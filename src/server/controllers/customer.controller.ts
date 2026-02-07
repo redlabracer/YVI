@@ -193,29 +193,8 @@ export const checkDuplicate = async (req: Request, res: Response) => {
   try {
     const { firstName, lastName, phone, email, licensePlate } = req.body
     
-    const conditions: any[] = []
-    
-    // Check by name (both first and last name must match)
-    if (firstName && lastName) {
-      conditions.push({
-        AND: [
-          { firstName: { equals: firstName, mode: 'insensitive' } },
-          { lastName: { equals: lastName, mode: 'insensitive' } }
-        ]
-      })
-    }
-    
-    // Check by phone
-    if (phone && phone.length > 5) {
-      conditions.push({ phone: { contains: phone.replace(/\s/g, '') } })
-    }
-    
-    // Check by email (use lowercase comparison for SQLite)
-    if (email && email.length > 3) {
-      conditions.push({ email: { equals: email.toLowerCase() } })
-    }
-    
-    // Check by license plate (via vehicle) - use uppercase for comparison
+    // SQLite doesn't support case-insensitive mode, so we use a different approach
+    // First check by license plate (most reliable)
     if (licensePlate && licensePlate.length > 2) {
       const normalizedPlate = licensePlate.replace(/\s/g, '').toUpperCase()
       const vehicleMatch = await prisma.vehicle.findFirst({
@@ -239,41 +218,85 @@ export const checkDuplicate = async (req: Request, res: Response) => {
       }
     }
     
-    if (conditions.length === 0) {
-      return res.json({ isDuplicate: false, matches: [] })
-    }
+    // For name matching in SQLite, we need to fetch and filter manually
+    // because SQLite doesn't support case-insensitive equals
+    const matches: any[] = []
     
-    const duplicates = await prisma.customer.findMany({
-      where: { OR: conditions },
-      take: 5,
-      include: { vehicles: true }
-    })
-    
-    if (duplicates.length > 0) {
-      const matches = duplicates.map(d => {
-        let matchReason = ''
-        if (firstName && lastName && 
-            d.firstName?.toLowerCase() === firstName.toLowerCase() && 
-            d.lastName?.toLowerCase() === lastName.toLowerCase()) {
-          matchReason = 'Name'
-        } else if (phone && d.phone?.includes(phone.replace(/\s/g, ''))) {
-          matchReason = 'Telefon'
-        } else if (email && d.email?.toLowerCase() === email.toLowerCase()) {
-          matchReason = 'E-Mail'
-        }
-        
-        return {
+    // Check by name (case-insensitive manual comparison)
+    if (firstName && lastName) {
+      const allCustomers = await prisma.customer.findMany({
+        include: { vehicles: true }
+      })
+      
+      const nameMatches = allCustomers.filter(c => 
+        c.firstName?.toLowerCase() === firstName.toLowerCase() &&
+        c.lastName?.toLowerCase() === lastName.toLowerCase()
+      )
+      
+      for (const d of nameMatches) {
+        matches.push({
           id: d.id,
           firstName: d.firstName,
           lastName: d.lastName,
           phone: d.phone,
           address: d.address,
           vehicles: d.vehicles?.map(v => v.licensePlate).filter(Boolean),
-          matchReason
-        }
+          matchReason: 'Name'
+        })
+      }
+    }
+    
+    // Check by phone
+    if (phone && phone.length > 5) {
+      const cleanPhone = phone.replace(/\s/g, '')
+      const phoneMatches = await prisma.customer.findMany({
+        where: { phone: { contains: cleanPhone } },
+        include: { vehicles: true }
       })
       
-      return res.json({ isDuplicate: true, matches })
+      for (const d of phoneMatches) {
+        if (!matches.find(m => m.id === d.id)) {
+          matches.push({
+            id: d.id,
+            firstName: d.firstName,
+            lastName: d.lastName,
+            phone: d.phone,
+            address: d.address,
+            vehicles: d.vehicles?.map(v => v.licensePlate).filter(Boolean),
+            matchReason: 'Telefon'
+          })
+        }
+      }
+    }
+    
+    // Check by email
+    if (email && email.length > 3) {
+      const allCustomers = await prisma.customer.findMany({
+        where: { email: { not: null } },
+        include: { vehicles: true }
+      })
+      
+      const emailMatches = allCustomers.filter(c => 
+        c.email?.toLowerCase() === email.toLowerCase()
+      )
+      
+      for (const d of emailMatches) {
+        if (!matches.find(m => m.id === d.id)) {
+          matches.push({
+            id: d.id,
+            firstName: d.firstName,
+            lastName: d.lastName,
+            phone: d.phone,
+            address: d.address,
+            vehicles: d.vehicles?.map(v => v.licensePlate).filter(Boolean),
+            matchReason: 'E-Mail'
+          })
+        }
+      }
+    }
+    
+    if (matches.length > 0) {
+      return res.json({ isDuplicate: true, matches: matches.slice(0, 5) })
     }
     
     res.json({ isDuplicate: false, matches: [] })

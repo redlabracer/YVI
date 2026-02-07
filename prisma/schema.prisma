@@ -97,6 +97,7 @@ model Settings {
   openaiKey String? // OpenAI API Key
   openaiModel String? @default("gpt-4o-mini") // OpenAI Model (deprecated, use aiProvider selection)
   googleApiKey String? // Google Gemini API Key
+  googleModel String? @default("gemini-2.0-flash") // Google Model: gemini-2.0-flash, gemini-2.0-pro, gemini-1.5-pro
   aiProvider String? @default("openai") // selected AI provider: 'openai' or 'google'
   aiPrompt  String? // Custom AI Prompt for document analysis
   carPartsUser String? // Car Parts Catalog Username

@@ -12,6 +12,7 @@ export default function Settings() {
   const [openaiKey, setOpenaiKey] = useState('')
   const [openaiModel, setOpenaiModel] = useState('gpt-4o-mini')
   const [googleApiKey, setGoogleApiKey] = useState('')
+  const [googleModel, setGoogleModel] = useState('gemini-2.0-flash')
   const [aiProvider, setAiProvider] = useState('openai')
   const [aiPrompt, setAiPrompt] = useState('')
   const [carPartsUser, setCarPartsUser] = useState('')
@@ -97,6 +98,8 @@ WICHTIG:
           // @ts-ignore
           if (settings.googleApiKey) setGoogleApiKey(settings.googleApiKey)
           // @ts-ignore
+          if (settings.googleModel) setGoogleModel(settings.googleModel)
+          // @ts-ignore
           if (settings.aiProvider) setAiProvider(settings.aiProvider)
           
           if (settings.aiPrompt) setAiPrompt(settings.aiPrompt)
@@ -125,8 +128,7 @@ WICHTIG:
         apiKey, 
         openaiKey, 
         openaiModel,
-        googleApiKey,
-        aiProvider,
+        googleApiKey,        googleModel,        aiProvider,
         aiPrompt: aiPrompt || defaultAiPrompt,
         carPartsUser, 
         carPartsPass, 
@@ -522,6 +524,20 @@ WICHTIG:
                   <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
                     Kostenlos im Google AI Studio verfügbar (Rate-Limited).
                   </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Gemini Modell</label>
+                  <select
+                    value={googleModel}
+                    onChange={(e) => setGoogleModel(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-gray-900 dark:text-white"
+                  >
+                    <option value="gemini-3.0-pro">Gemini 3.0 Pro (Neueste Generation)</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Sehr schnell)</option>
+                    <option value="gemini-2.0-pro-exp-02-05">Gemini 2.0 Pro (Experimental)</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Fallback)</option>
+                  </select>
                 </div>
               </div>
             )}

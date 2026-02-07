@@ -120,11 +120,10 @@ Instruction: Extract street, zip, city.
       }
 
       const genAI = new GoogleGenerativeAI(settings.googleApiKey);
-      // Use gemini-1.5-pro as it's the current stable high-end vision model.
-      // 2.0 or 3.0 preview might be available but 'gemini-1.5-pro' is a safe default for now unless user specified otherwise.
-      // But user asked for Gemini 3 capabilities, currently 1.5 Pro is the standard API access, or 2.0 Flash. 
-      // We will default to gemini-1.5-pro-latest which is excellent.
-      const modelName = 'gemini-1.5-pro'; 
+      // Use selected model or default to gemini-2.0-flash
+      const modelName = settings.googleModel || 'gemini-2.0-flash'; 
+      console.log(`[AI] Using Google Model: ${modelName}`);
+      
       const model = genAI.getGenerativeModel({ model: modelName });
 
       const imagePart = {

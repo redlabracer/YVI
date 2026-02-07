@@ -1364,47 +1364,29 @@ ipcMain.handle('create-backup', async () => {
 })
 
 ipcMain.handle('save-settings', async (_, data) => {
-  const { apiKey, openaiKey, openaiModel, aiPrompt, carPartsUser, carPartsPass, conradUser, conradPass, lexwareUser, lexwarePass, theme, autoSync } = data
+  // Use dynamic update to allow new fields (like googleApiKey) to be saved automatically
+  const { id, ...updateData } = data
+  
   // Check if settings exist, update or create
   const existing = await prisma.settings.findFirst()
-  if (existing) {
-    return await prisma.settings.update({
-      where: { id: existing.id },
-      data: { 
-        ...(apiKey !== undefined && { apiKey }),
-        ...(openaiKey !== undefined && { openaiKey }),
-        ...(openaiModel !== undefined && { openaiModel }),
-        ...(aiPrompt !== undefined && { aiPrompt }),
-        ...(carPartsUser !== undefined && { carPartsUser }),
-        ...(carPartsPass !== undefined && { carPartsPass }),
-        ...(conradUser !== undefined && { conradUser }),
-        ...(conradPass !== undefined && { conradPass }),
-        ...(lexwareUser !== undefined && { lexwareUser }),
-        ...(lexwarePass !== undefined && { lexwarePass }),
-        ...(theme !== undefined && { theme }),
-        ...(autoSync !== undefined && { autoSync })
-      }
-    })
-  } else {
-    return await prisma.settings.create({
-      data: { 
-        apiKey: apiKey || null, 
-        openaiKey: openaiKey || null,
-        openaiModel: openaiModel || 'gpt-4o-mini',
-        aiPrompt: aiPrompt || null,
-        carPartsUser: carPartsUser || null,
-        carPartsPass: carPartsPass || null,
-        conradUser: conradUser || null,
-        conradPass: conradPass || null,
-        lexwareUser: lexwareUser || null,
-        lexwarePass: lexwarePass || null,
-        theme: theme || 'dark',
-        syncEnabled: true,
-        autoSync: autoSync || false
-      }
-    })
+  
+  try {
+    if (existing) {
+      return await prisma.settings.update({
+        where: { id: existing.id },
+        data: updateData
+      })
+    } else {
+      return await prisma.settings.create({
+        data: updateData
+      })
+    }
+  } catch (error) {
+    console.error('Error saving settings:', error)
+    throw error
   }
 })
+
 
 ipcMain.handle('sync-lexware', async () => {
   console.log('IPC: sync-lexware called')

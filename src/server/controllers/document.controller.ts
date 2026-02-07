@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../db';
 import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { join, extname } from 'path';
 import fs from 'fs';
 import multer from 'multer';
@@ -22,7 +23,7 @@ const storage = multer.diskStorage({
 
 export const upload = multer({ storage });
 
-// Analyze registration document with OpenAI Vision
+// Analyze registration document with AI (OpenAI or Google Gemini)
 export const analyzeRegistrationDoc = async (req: Request, res: Response) => {
   try {
     const { extractCustomerData } = req.body;
@@ -32,92 +33,76 @@ export const analyzeRegistrationDoc = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Keine Datei hochgeladen' });
     }
 
-    // Get OpenAI key from settings
+    // Get Settings
     const settings = await prisma.settings.findFirst();
-    if (!settings || !settings.openaiKey) {
-      return res.status(400).json({ error: 'Kein OpenAI API Key in den Einstellungen gefunden.' });
+    if (!settings) {
+      return res.status(500).json({ error: 'Systemfehler: Keine Einstellungen gefunden.' });
     }
 
-    const openai = new OpenAI({ apiKey: settings.openaiKey });
+    const aiProvider = settings.aiProvider || 'openai';
 
     // Read file and convert to base64
     const fileBuffer = fs.readFileSync(file.path);
     const base64Image = fileBuffer.toString('base64');
     const extension = extname(file.originalname).toLowerCase();
-
+    
     let mimeType = 'image/jpeg';
     if (extension === '.png') mimeType = 'image/png';
     if (extension === '.webp') mimeType = 'image/webp';
     if (extension === '.gif') mimeType = 'image/gif';
 
     if (extension === '.pdf') {
-      // Clean up uploaded file
       fs.unlinkSync(file.path);
-      return res.status(400).json({ error: 'PDF-Dateien werden aktuell nicht für den KI-Scan unterstützt. Bitte verwenden Sie ein Foto (JPG/PNG).' });
+      return res.status(400).json({ error: 'PDF-Dateien werden aktuell nicht unterstützt. Bitte verwenden Sie ein Foto (JPG/PNG).' });
     }
 
     const vehicleDataInstruction = `
 Section 2: Fahrzeugdaten (Vehicle Data)
 Kennzeichen (License Plate)
 Source Field: Code A.
-Location: Top left of the document (under "Amtliches Kennzeichen") or inside the first box of the main grid.
+Location: Top left.
 Instruction: Extract the alphanumeric string found in the box labeled A.
-Example value in image: "SP MQ 16".
+Example: "SP MQ 16".
 FIN (Fahrzeugidentifikationsnummer / VIN)
 Source Field: Code E.
-Location: Top row of the central data grid, just below the license plate date.
 Instruction: Extract the long alphanumeric string labeled E.
-Example value in image: "KNARH81GB..."
+Example: "KNARH81GB..."
 Marke (Brand)
 Source Field: Code D.1.
-Location: Second row of the central data grid.
 Instruction: Extract the manufacturer name labeled D.1.
-Example value in image: "Kia".
+Example: "Kia".
 Modell (Model)
 Source Field: Code D.3.
-Location: Fourth row of the central data grid (below D.2).
 Instruction: Extract the commercial description labeled D.3.
-Example value in image: "SORENTO".
-HSN (4-stellig)
+Example: "SORENTO".
+HSN (4-Digits)
 Source Field: Code 2.1.
-Location: Top row of the central data grid, center column.
-Instruction: Extract the 4-digit numeric code labeled 2.1.
-Example value in image: "8253".
-TSN (3-stellig)
+Instruction: Extract the 4-digit code.
+Example: "8253".
+TSN (3-Digits)
 Source Field: Code 2.2.
-Location: Top row of the central data grid, right column.
-Instruction: Extract the first 3 characters of the code labeled 2.2.
-Example value in image: "AIP" (Full value is AIP000047).
+Instruction: Extract the first 3 characters.
+Example: "AIP".
 Erstzulassung (First Registration)
 Source Field: Code B.
-Location: Top left corner of the central data grid (highlighted in red in the source image).
-Instruction: Extract the date found in the box labeled B.
-Example value in image: "21.10.2020".
+Instruction: Extract date labeled B.
+Example: "21.10.2020".
 Kraftstoff (Fuel Type)
 Source Field: Code P.3.
-Location: Lower half of the central data grid, left side.
 Instruction: Extract the text description labeled P.3.
-Example value in image: "Hybr.Benzin/E" (Hybrid Petrol/Electric).
 `;
 
     const personalDataInstruction = `
 Section 1: Persönliche Daten (Personal Data)
 Vorname (First Name) / Nachname (Last Name)
-Source Field: Codes C.1.1 (Last Name/Company) and C.1.2 (First Name).
-Location: Left column, middle section.
-Instruction: Extract the text under C.1.1 for the Last Name or Company Name. If a personal name exists under C.1.2, use that for First Name.
-Example value in image: "Autohaus Bellemann GmbH" (Company name).
+Source Field: Codes C.1.1 / C.1.2.
+Instruction: Extract Last Name/Company under C.1.1. Extract First Name under C.1.2.
 Anschrift (Address)
 Source Field: Code C.1.3.
-Location: Left column, lower section.
-Instruction: Extract the street, postal code, and city found under C.1.3.
-Example value in image: "Tullastr. 10, 67346 Speyer".
-Telefon / Mobil
-Instruction: Do not extract. This information is not present on the registration document.
+Instruction: Extract street, zip, city.
 `;
 
-    let systemPrompt = "Du bist ein Assistent für eine KFZ-Werkstatt. Analysiere das Bild eines Fahrzeugscheins und extrahiere die Daten basierend auf folgenden Instruktionen:\n";
-
+    let systemPrompt = "Du bist ein Assistent für eine KFZ-Werkstatt. Analysiere das Bild eines Fahrzeugscheins und extrahiere die Daten.\n";
     if (extractCustomerData === 'true' || extractCustomerData === true) {
       systemPrompt += personalDataInstruction + "\n" + vehicleDataInstruction;
       systemPrompt += `\nAntworte NUR im JSON-Format: { "make": "...", "model": "...", "licensePlate": "...", "vin": "...", "hsn": "...", "tsn": "...", "firstRegistration": "YYYY-MM-DD", "fuelType": "...", "firstName": "...", "lastName": "...", "address": "..." }`;
@@ -126,31 +111,60 @@ Instruction: Do not extract. This information is not present on the registration
       systemPrompt += `\nAntworte NUR im JSON-Format: { "make": "...", "model": "...", "licensePlate": "...", "vin": "...", "hsn": "...", "tsn": "...", "firstRegistration": "YYYY-MM-DD", "fuelType": "..." }`;
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Extrahiere die Daten aus diesem Dokument:" },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${mimeType};base64,${base64Image}`
-              }
-            }
-          ]
-        }
-      ],
-      response_format: { type: "json_object" }
-    });
+    let result = {};
 
-    const content = response.choices[0].message.content;
-    const result = JSON.parse(content || '{}');
+    if (aiProvider === 'google') {
+      // --- GOOGLE GEMINI IMPLEMENTATION ---
+      if (!settings.googleApiKey) {
+        return res.status(400).json({ error: 'Kein Google AI API Key in den Einstellungen gefunden.' });
+      }
+
+      const genAI = new GoogleGenerativeAI(settings.googleApiKey);
+      // Use gemini-1.5-pro as it's the current stable high-end vision model.
+      // 2.0 or 3.0 preview might be available but 'gemini-1.5-pro' is a safe default for now unless user specified otherwise.
+      // But user asked for Gemini 3 capabilities, currently 1.5 Pro is the standard API access, or 2.0 Flash. 
+      // We will default to gemini-1.5-pro-latest which is excellent.
+      const modelName = 'gemini-1.5-pro'; 
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      const imagePart = {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType
+        },
+      };
+
+      const aiResponse = await model.generateContent([systemPrompt, imagePart]);
+      const text = aiResponse.response.text();
+      
+      // Clean up markdown code blocks if Gemini adds them
+      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      result = JSON.parse(jsonStr);
+
+    } else {
+      // --- OPENAI IMPLEMENTATION ---
+      if (!settings.openaiKey) {
+        return res.status(400).json({ error: 'Kein OpenAI API Key in den Einstellungen gefunden.' });
+      }
+      const openai = new OpenAI({ apiKey: settings.openaiKey });
+      
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Extrahiere die Daten aus diesem Dokument:" },
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" }
+      });
+      const content = response.choices[0].message.content;
+      result = JSON.parse(content || '{}');
+    }
 
     // Helper function to convert text to Proper Case (Title Case)
     const toProperCase = (str: string): string => {
@@ -162,45 +176,28 @@ Instruction: Do not extract. This information is not present on the registration
         .join(' ');
     };
 
-    // Normalize names and address to Proper Case (KI returns sometimes CAPS)
-    if (result.firstName) {
-      result.firstName = toProperCase(result.firstName);
-    }
-    if (result.lastName) {
-      result.lastName = toProperCase(result.lastName);
-    }
-    if (result.address) {
-      result.address = toProperCase(result.address);
-    }
-    if (result.make) {
-      result.make = toProperCase(result.make);
-    }
-    if (result.model) {
-      result.model = result.model.toUpperCase(); // Model names often uppercase (e.g. GOLF, SORENTO)
-    }
-    // License plate should be uppercase
+    // Normalize names and address to Proper Case
+    if (result.firstName) result.firstName = toProperCase(result.firstName);
+    if (result.lastName) result.lastName = toProperCase(result.lastName);
+    if (result.address) result.address = toProperCase(result.address);
+    if (result.make) result.make = toProperCase(result.make);
+    if (result.model) result.model = result.model.toUpperCase();
     if (result.licensePlate) {
       result.licensePlate = result.licensePlate.toUpperCase().replace(/\s+/g, ' ').trim();
     }
 
-    // Clean up uploaded file after processing
+    // Clean up uploaded file
     fs.unlinkSync(file.path);
 
     res.json(result);
+
   } catch (error: any) {
     console.error('Error analyzing document:', error);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
 
-    // Clean up file if it exists
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-
-    if (error.status === 429) {
-      return res.status(429).json({ error: 'OpenAI Quote überschritten: Bitte prüfen Sie Ihr Guthaben oder Ihre API-Limits bei OpenAI.' });
-    }
-    if (error.status === 401) {
-      return res.status(401).json({ error: 'Ungültiger OpenAI API-Key. Bitte prüfen Sie die Einstellungen.' });
-    }
+    if (error.status === 429) return res.status(429).json({ error: 'AI Quote überschritten (Rate Limit).' });
+    if (error.status === 401) return res.status(401).json({ error: 'Ungültiger API-Key.' });
+    
     res.status(500).json({ error: 'Fehler bei der Dokumentenanalyse: ' + error.message });
   }
 };

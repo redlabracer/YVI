@@ -11,6 +11,8 @@ export default function Settings() {
   const [apiKey, setApiKey] = useState('')
   const [openaiKey, setOpenaiKey] = useState('')
   const [openaiModel, setOpenaiModel] = useState('gpt-4o-mini')
+  const [googleApiKey, setGoogleApiKey] = useState('')
+  const [aiProvider, setAiProvider] = useState('openai')
   const [aiPrompt, setAiPrompt] = useState('')
   const [carPartsUser, setCarPartsUser] = useState('')
   const [carPartsPass, setCarPartsPass] = useState('')
@@ -92,6 +94,11 @@ WICHTIG:
           if (settings.apiKey) setApiKey(settings.apiKey)
           if (settings.openaiKey) setOpenaiKey(settings.openaiKey)
           if (settings.openaiModel) setOpenaiModel(settings.openaiModel)
+          // @ts-ignore
+          if (settings.googleApiKey) setGoogleApiKey(settings.googleApiKey)
+          // @ts-ignore
+          if (settings.aiProvider) setAiProvider(settings.aiProvider)
+          
           if (settings.aiPrompt) setAiPrompt(settings.aiPrompt)
           if (settings.carPartsUser) setCarPartsUser(settings.carPartsUser)
           if (settings.carPartsPass) setCarPartsPass(settings.carPartsPass)
@@ -118,6 +125,8 @@ WICHTIG:
         apiKey, 
         openaiKey, 
         openaiModel,
+        googleApiKey,
+        aiProvider,
         aiPrompt: aiPrompt || defaultAiPrompt,
         carPartsUser, 
         carPartsPass, 
@@ -427,46 +436,95 @@ WICHTIG:
           </div>
         </div>
 
-        {/* OpenAI Integration */}
+        {/* AI Integration */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg">
               <BrainCircuit size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">KI-Funktionen (OpenAI)</h2>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">Aktiviert die automatische Analyse von Fahrzeugscheinen.</p>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">KI-Konfiguration</h2>
+              <p className="text-gray-500 dark:text-gray-400 text-xs">Wählen Sie den Anbieter für die Fahrzeugschein-Analyse.</p>
             </div>
           </div>
 
           <div className="space-y-4">
+            
+            {/* AI Provider Selection */}
             <div>
-              <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">OpenAI API Key</label>
-              <input 
-                type="password" 
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
-                placeholder="sk-..."
-              />
+              <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">KI-Anbieter</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setAiProvider('openai')}
+                  className={`px-4 py-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${
+                    aiProvider === 'openai' 
+                      ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400 ring-2 ring-blue-500/20' 
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <span className="font-bold text-sm">OpenAI (GPT-4o)</span>
+                  <span className="text-xs opacity-70">Bewährt & Stabil</span>
+                </button>
+                <button
+                  onClick={() => setAiProvider('google')}
+                  className={`px-4 py-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${
+                    aiProvider === 'google' 
+                      ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400 ring-2 ring-blue-500/20' 
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <span className="font-bold text-sm">Google Gemini</span>
+                  <span className="text-xs opacity-70">Multimodal & Schnell</span>
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">KI-Modell</label>
-              <select
-                value={openaiModel}
-                onChange={(e) => setOpenaiModel(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-gray-900 dark:text-white"
-              >
-                <option value="gpt-4o-mini">GPT-4o Mini - Schnell & Günstig (~$0.15/1M Token) ⭐ Empfohlen</option>
-                <option value="gpt-4o">GPT-4o - Beste Qualität (~$2.50/1M Token)</option>
-                <option value="gpt-4-turbo">GPT-4 Turbo - Sehr gute Qualität (~$10/1M Token)</option>
-                <option value="gpt-3.5-turbo">GPT-3.5 Turbo - Am Günstigsten (~$0.50/1M Token)</option>
-              </select>
-              <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                GPT-4o Mini bietet das beste Preis-Leistungs-Verhältnis für Dokumentenanalyse.
-              </p>
-            </div>
+            {aiProvider === 'openai' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">OpenAI API Key</label>
+                  <input 
+                    type="password" 
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
+                    placeholder="sk-..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">KI-Modell</label>
+                  <select
+                    value={openaiModel}
+                    onChange={(e) => setOpenaiModel(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-gray-900 dark:text-white"
+                  >
+                    <option value="gpt-4o-mini">GPT-4o Mini - Schnell & Günstig (~$0.15/1M Token) ⭐ Empfohlen</option>
+                    <option value="gpt-4o">GPT-4o - Beste Qualität (~$2.50/1M Token)</option>
+                    <option value="gpt-4-turbo">GPT-4 Turbo - Sehr gute Qualität (~$10/1M Token)</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo - Am Günstigsten (~$0.50/1M Token)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {aiProvider === 'google' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Google API Key (Gemini)</label>
+                  <input 
+                    type="password" 
+                    value={googleApiKey}
+                    onChange={(e) => setGoogleApiKey(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
+                    placeholder="AIza..."
+                  />
+                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                    Kostenlos im Google AI Studio verfügbar (Rate-Limited).
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">

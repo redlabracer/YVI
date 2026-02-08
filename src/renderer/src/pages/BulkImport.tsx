@@ -266,7 +266,26 @@ export default function BulkImport() {
         console.log('Duplicate check result:', duplicateCheck)
         
         if (duplicateCheck.isDuplicate && duplicateCheck.matches?.length > 0) {
-          console.log('Duplicate found! Showing modal...')
+          
+          // SMART RESOLVE: Prüfen ob es genau eine Person ist, aber das Auto neu ist
+          const newPlate = entry.result.licensePlate?.replace(/\s/g, '').toUpperCase();
+          const nameMatches = duplicateCheck.matches.filter((m: any) => m.matchReason === 'Name' || m.matchReason === 'E-Mail');
+          
+          if (nameMatches.length === 1) {
+             const match = nameMatches[0];
+             const existingVehicles = match.vehicles || [];
+             // Check if license plate exists in that customer's vehicles
+             const carExists = existingVehicles.some((v: string) => v.replace(/\s/g, '').toUpperCase() === newPlate);
+             
+             if (!carExists) {
+               console.log('Smart Resolve: Bekannte Person, neues Auto -> Füge Fahrzeug hinzu', match.id);
+               // Auto-Add Vehicle
+               const vehicleId = await addVehicleToCustomer(entry, match.id);
+               return vehicleId ? match.id : null;
+             }
+          }
+
+          console.log('Ambiguous duplicate found! Showing modal...')
           // Show duplicate modal and wait for user decision
           return new Promise((resolve) => {
             setCurrentDuplicateEntry(entry)

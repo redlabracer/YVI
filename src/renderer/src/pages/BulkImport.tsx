@@ -400,10 +400,7 @@ export default function BulkImport() {
     // Track analyzed entries in this session for duplicate detection
     const analyzedInSession: FileEntry[] = [...files.filter(f => f.status === 'success' && f.result)]
     
-    // BATCH PROCESSING: Process files in small chunks to avoid blocking UI
-    // With 1000+ files, running one-by-one with state updates is too heavy
-    const BATCH_SIZE = 1; // Keep 1 for now to safely handle logic, but optimize loop
-    
+    // Process files one-by-one with delays to prevent UI freezing
     for (let i = 0; i < pendingFiles.length; i++) {
       // Check if cancelled
       if (abortControllerRef.current?.signal.aborted) {

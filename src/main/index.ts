@@ -3,6 +3,7 @@ import { join, basename, extname } from 'path'
 import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import OpenAI from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { autoUpdater } from 'electron-updater'
 import { startMobileServer, stopMobileServer } from './mobile-server'
 import { logger, setupLoggerIPC } from './logger'
@@ -886,12 +887,13 @@ ipcMain.handle('analyze-registration-doc', async (_, args) => {
   const extractCustomerData = typeof args === 'object' ? args.extractCustomerData : false
 
   const settings = await prisma.settings.findFirst()
-  if (!settings || !settings.openaiKey) {
-    throw new Error('Kein OpenAI API Key in den Einstellungen gefunden.')
+  if (!settings) {
+    throw new Error('Systemfehler: Keine Einstellungen gefunden.')
   }
 
-  const openai = new OpenAI({ apiKey: settings.openaiKey })
-  
+  const aiProvider = settings.aiProvider || 'openai'
+  console.log(`[AI] Analyzing document via ${aiProvider}...`)
+
   const fileBuffer = await fs.readFile(filePath)
   const base64Image = fileBuffer.toString('base64')
   const extension = extname(filePath).toLowerCase()
@@ -904,111 +906,141 @@ ipcMain.handle('analyze-registration-doc', async (_, args) => {
   if (extension === '.pdf') {
     throw new Error('PDF-Dateien werden aktuell nicht für den KI-Scan unterstützt. Bitte verwenden Sie ein Foto (JPG/PNG).')
   }
-  
-  try {
-    const vehicleDataInstruction = `
+
+  const vehicleDataInstruction = `
 Section 2: Fahrzeugdaten (Vehicle Data)
 Kennzeichen (License Plate)
 Source Field: Code A.
-Location: Top left of the document (under "Amtliches Kennzeichen") or inside the first box of the main grid.
+Location: Top left.
 Instruction: Extract the alphanumeric string found in the box labeled A.
-Example value in image: "SP MQ 16".
+Example: "SP MQ 16".
 FIN (Fahrzeugidentifikationsnummer / VIN)
 Source Field: Code E.
-Location: Top row of the central data grid, just below the license plate date.
 Instruction: Extract the long alphanumeric string labeled E.
-Example value in image: "KNARH81GB..."
+Example: "KNARH81GB..."
 Marke (Brand)
 Source Field: Code D.1.
-Location: Second row of the central data grid.
 Instruction: Extract the manufacturer name labeled D.1.
-Example value in image: "Kia".
+Example: "Kia".
 Modell (Model)
 Source Field: Code D.3.
-Location: Fourth row of the central data grid (below D.2).
 Instruction: Extract the commercial description labeled D.3.
-Example value in image: "SORENTO".
-HSN (4-stellig)
+Example: "SORENTO".
+HSN (4-Digits)
 Source Field: Code 2.1.
-Location: Top row of the central data grid, center column.
-Instruction: Extract the 4-digit numeric code labeled 2.1.
-Example value in image: "8253".
-TSN (3-stellig)
+Instruction: Extract the 4-digit code.
+Example: "8253".
+TSN (3-Digits)
 Source Field: Code 2.2.
-Location: Top row of the central data grid, right column.
-Instruction: Extract the first 3 characters of the code labeled 2.2.
-Example value in image: "AIP" (Full value is AIP000047).
+Instruction: Extract the first 3 characters.
+Example: "AIP".
 Erstzulassung (First Registration)
 Source Field: Code B.
-Location: Top left corner of the central data grid (highlighted in red in the source image).
-Instruction: Extract the date found in the box labeled B.
-Example value in image: "21.10.2020".
+Instruction: Extract date labeled B.
+Example: "21.10.2020".
 Kraftstoff (Fuel Type)
 Source Field: Code P.3.
-Location: Lower half of the central data grid, left side.
 Instruction: Extract the text description labeled P.3.
-Example value in image: "Hybr.Benzin/E" (Hybrid Petrol/Electric).
 `
 
-    const personalDataInstruction = `
+  const personalDataInstruction = `
 Section 1: Persönliche Daten (Personal Data)
 Vorname (First Name) / Nachname (Last Name)
-Source Field: Codes C.1.1 (Last Name/Company) and C.1.2 (First Name).
-Location: Left column, middle section.
-Instruction: Extract the text under C.1.1 for the Last Name or Company Name. If a personal name exists under C.1.2, use that for First Name.
-Example value in image: "Autohaus Bellemann GmbH" (Company name).
+Source Field: Codes C.1.1 / C.1.2.
+Instruction: Extract Last Name/Company under C.1.1. Extract First Name under C.1.2.
 Anschrift (Address)
 Source Field: Code C.1.3.
-Location: Left column, lower section.
-Instruction: Extract the street, postal code, and city found under C.1.3.
-Example value in image: "Tullastr. 10, 67346 Speyer".
-Telefon / Mobil
-Instruction: Do not extract. This information is not present on the registration document.
+Instruction: Extract street, zip, city.
 `
 
-    let systemPrompt = "Du bist ein Assistent für eine KFZ-Werkstatt. Analysiere das Bild eines Fahrzeugscheins und extrahiere die Daten basierend auf folgenden Instruktionen:\n"
+  let systemPrompt = "Du bist ein Assistent für eine KFZ-Werkstatt. Analysiere das Bild eines Fahrzeugscheins und extrahiere die Daten.\n"
+  if (extractCustomerData) {
+    systemPrompt += personalDataInstruction + "\n" + vehicleDataInstruction
+    systemPrompt += `\nAntworte NUR im JSON-Format: { "make": "...", "model": "...", "licensePlate": "...", "vin": "...", "hsn": "...", "tsn": "...", "firstRegistration": "YYYY-MM-DD", "fuelType": "...", "firstName": "...", "lastName": "...", "address": "..." }`
+  } else {
+    systemPrompt += vehicleDataInstruction
+    systemPrompt += `\nAntworte NUR im JSON-Format: { "make": "...", "model": "...", "licensePlate": "...", "vin": "...", "hsn": "...", "tsn": "...", "firstRegistration": "YYYY-MM-DD", "fuelType": "..." }`
+  }
 
-    if (extractCustomerData) {
-      systemPrompt += personalDataInstruction + "\n" + vehicleDataInstruction
-      systemPrompt += `\nAntworte NUR im JSON-Format: { "make": "...", "model": "...", "licensePlate": "...", "vin": "...", "hsn": "...", "tsn": "...", "firstRegistration": "YYYY-MM-DD", "fuelType": "...", "firstName": "...", "lastName": "...", "address": "..." }`
+  try {
+    let result = {}
+
+    if (aiProvider === 'google') {
+      // --- GOOGLE GEMINI ---
+      if (!settings.googleApiKey) {
+        throw new Error('Kein Google AI API Key in den Einstellungen gefunden.')
+      }
+
+      const genAI = new GoogleGenerativeAI(settings.googleApiKey)
+      const modelName = settings.googleModel || 'gemini-1.5-pro'
+      const model = genAI.getGenerativeModel({ model: modelName })
+
+      const imagePart = {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType
+        },
+      }
+
+      console.log(`[AI] Sending request to Google Gemini (${modelName})...`)
+      
+      const aiResponse = await model.generateContent([systemPrompt, imagePart])
+      const text = aiResponse.response.text()
+      
+      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim()
+      result = JSON.parse(jsonStr)
+
     } else {
-      systemPrompt += vehicleDataInstruction
-      systemPrompt += `\nAntworte NUR im JSON-Format: { "make": "...", "model": "...", "licensePlate": "...", "vin": "...", "hsn": "...", "tsn": "...", "firstRegistration": "YYYY-MM-DD", "fuelType": "..." }`
+      // --- OPENAI ---
+      if (!settings.openaiKey) {
+        throw new Error('Kein OpenAI API Key in den Einstellungen gefunden.')
+      }
+      
+      const openai = new OpenAI({ apiKey: settings.openaiKey })
+      
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Extrahiere die Daten aus diesem Dokument:" },
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" }
+      })
+      const content = response.choices[0].message.content
+      result = JSON.parse(content || '{}')
     }
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Extrahiere die Daten aus diesem Dokument:" },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${mimeType};base64,${base64Image}`
-              }
-            }
-          ]
-        }
-      ],
-      response_format: { type: "json_object" }
-    })
+    // Helper functions
+    const toProperCase = (str: string) => {
+      if (!str) return str
+      return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+    }
 
-    const content = response.choices[0].message.content
-    return JSON.parse(content || '{}')
+    // Normalize
+    const r = result as any
+    if (r.firstName) r.firstName = toProperCase(r.firstName)
+    if (r.lastName) r.lastName = toProperCase(r.lastName)
+    if (r.address) r.address = toProperCase(r.address)
+    if (r.make) r.make = toProperCase(r.make)
+    if (r.model) r.model = r.model.toUpperCase()
+    if (r.licensePlate) r.licensePlate = r.licensePlate.toUpperCase().replace(/\s+/g, ' ').trim()
+
+    return r
+
   } catch (error: any) {
     if (error.status === 429) {
-      throw new Error('OpenAI Quote überschritten: Bitte prüfen Sie Ihr Guthaben oder Ihre API-Limits bei OpenAI.')
+      throw new Error('OpenAI/Gemini Quote überschritten (Rate Limit).')
     }
     if (error.status === 401) {
-      throw new Error('Ungültiger OpenAI API-Key. Bitte prüfen Sie die Einstellungen.')
+      throw new Error('Ungültiger KI API-Key (401).')
     }
-    throw error
+    throw error // Forward exact error message to frontend
   }
 })
 

@@ -27,12 +27,20 @@ export interface CustomerCreateData extends Customer {
 
 // Wir prüfen, ob wir im Electron-Umfeld laufen
 // @ts-ignore
+const isElectronEnv = window.electron !== undefined || navigator.userAgent.toLowerCase().includes('electron');
+
+// @ts-ignore
 // Wenn "useRemote" true ist, tun wir so als wären wir im Web-Modus, damit wir die API Calls nutzen
 const useRemote = localStorage.getItem('useRemote') === 'true';
-// @ts-ignore
-const isElectron = window.electron !== undefined && !useRemote;
 
-console.log(`[API] Initialisiert. Modus: ${isElectron ? 'ELECTRON (Desktop)' : 'WEB/REMOTE (Server/Mobile)'}`);
+// Check availability of IPC
+// @ts-ignore
+const hasIpc = window.electron !== undefined;
+
+// @ts-ignore
+const isElectron = hasIpc && !useRemote;
+
+console.log(`[API] Initialisiert. Env: ${isElectronEnv ? 'Electron' : 'Web'}, hasIpc: ${hasIpc}, useRemote: ${useRemote} -> Mode: ${isElectron ? 'ELECTRON (Desktop)' : 'WEB/REMOTE (Server/Mobile)'}`);
 
 // Hilfsfunktion für HTTP Requests (wenn wir im Web-Modus sind)
 const request = async (endpoint: string, method = 'GET', body?: any) => {

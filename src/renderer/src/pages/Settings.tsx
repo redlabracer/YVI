@@ -267,15 +267,37 @@ WICHTIG:
             </div>
 
             {useRemote && (
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Server URL</label>
-                <input 
-                  type="text" 
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white"
-                  placeholder="http://..."
-                />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Server URL</label>
+                  <input 
+                    type="text" 
+                    value={serverUrl}
+                    onChange={(e) => setServerUrl(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white"
+                    placeholder="https://..."
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Server Access Token (Auth)</label>
+                  <div className="relative">
+                    <input 
+                      type="password" 
+                      value={localStorage.getItem('auth') || ''} 
+                      onChange={(e) => {
+                         localStorage.setItem('auth', e.target.value);
+                         // Force re-render to show value (hacky but works for this context)
+                         setServerUrl(serverUrl); 
+                      }}
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white font-mono"
+                      placeholder="Remote Server Token..."
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Tragen Sie hier den Zugriffstoken für {serverUrl || 'den Server'} ein.
+                  </p>
+                </div>
               </div>
             )}
 

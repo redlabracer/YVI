@@ -7,7 +7,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   preload: {
-    plugins: []
+    plugins: [externalizeDepsPlugin({ exclude: ['@electron-toolkit/preload'] })]
   },
   renderer: {
     resolve: {

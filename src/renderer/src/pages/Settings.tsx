@@ -275,29 +275,45 @@ WICHTIG:
                     value={serverUrl}
                     onChange={(e) => setServerUrl(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white"
-                    placeholder="https://..."
+                    placeholder="https://app.werkstatt-terhaag.uk"
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Server Access Token (Auth)</label>
-                  <div className="relative">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Server Benutzername</label>
                     <input 
-                      type="password" 
-                      value={localStorage.getItem('auth') || ''} 
+                      type="text" 
                       onChange={(e) => {
-                         localStorage.setItem('auth', e.target.value);
-                         // Force re-render to show value (hacky but works for this context)
-                         setServerUrl(serverUrl); 
+                         const user = e.target.value;
+                         const pass = (document.getElementById('serverPass') as HTMLInputElement)?.value || '';
+                         const token = 'Basic ' + btoa(user + ':' + pass);
+                         localStorage.setItem('auth', token);
                       }}
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white font-mono"
-                      placeholder="Remote Server Token..."
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white"
+                      placeholder="Auth User (Server)"
                     />
                   </div>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Tragen Sie hier den Zugriffstoken für {serverUrl || 'den Server'} ein.
-                  </p>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Server Passwort</label>
+                    <input 
+                      id="serverPass"
+                      type="password" 
+                      onChange={(e) => {
+                         const pass = e.target.value;
+                         const user = (e.target.previousElementSibling?.previousElementSibling as HTMLInputElement)?.value || 
+                                      (e.target.parentElement?.previousElementSibling?.querySelector('input') as HTMLInputElement)?.value || '';
+                         const token = 'Basic ' + btoa(user + ':' + pass);
+                         localStorage.setItem('auth', token);
+                      }}
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm text-gray-900 dark:text-white"
+                      placeholder="Auth Password (Server)"
+                    />
+                  </div>
                 </div>
+                <p className="mt-1 text-xs text-gray-400">
+                  Die Zugangsdaten müssen mit den Environment Variable auf dem Server (AUTH_USER, AUTH_PASS) übereinstimmen.
+                </p>
               </div>
             )}
 

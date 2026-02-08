@@ -400,6 +400,10 @@ export default function BulkImport() {
     // Track analyzed entries in this session for duplicate detection
     const analyzedInSession: FileEntry[] = [...files.filter(f => f.status === 'success' && f.result)]
     
+    // BATCH PROCESSING: Process files in small chunks to avoid blocking UI
+    // With 1000+ files, running one-by-one with state updates is too heavy
+    const BATCH_SIZE = 1; // Keep 1 for now to safely handle logic, but optimize loop
+    
     for (let i = 0; i < pendingFiles.length; i++) {
       // Check if cancelled
       if (abortControllerRef.current?.signal.aborted) {
@@ -407,21 +411,27 @@ export default function BulkImport() {
       }
       
       const entry = pendingFiles[i]
+      
+      // Update current index for Progress Bar (without re-rendering full list if possible)
+      // setCurrentIndex causes re-render. Maybe limit it?
       setCurrentIndex(files.findIndex(f => f.id === entry.id))
       
       // Update status to analyzing
+      // This triggers a re-render of the list. 
       setFiles(prev => prev.map(f => 
         f.id === entry.id ? { ...f, status: 'analyzing' } : f
       ))
       
-      // Small delay to allow UI to update and prevent white screen
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Force UI update
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       // Analyze the file
-      const analyzedEntry = await analyzeFile(entry)
-      
-      // Another small delay after analysis
-      await new Promise(resolve => setTimeout(resolve, 50))
+      let analyzedEntry: FileEntry;
+      try {
+        analyzedEntry = await analyzeFile(entry);
+      } catch(e) {
+          analyzedEntry = { ...entry, status: 'error', error: 'System error during analysis' };
+      }
       
       // Check for API key error
       if (analyzedEntry.status === 'error' && 
@@ -436,23 +446,26 @@ export default function BulkImport() {
         ))
         break
       }
-      
+
+
       // Check for in-session duplicates (same data from different files in this import)
       if (analyzedEntry.status === 'success' && analyzedEntry.result) {
+        // OPTIMIZATION: Only search recent matches if list is huge? No, duplicates are important.
+        // But doing this find on 1000 items 1000 times is 1,000,000 ops. 
+        // With 1400 files it is fine for modern JS engines.
         const inSessionDuplicate = analyzedInSession.find(f => 
           (f.result?.licensePlate && analyzedEntry.result?.licensePlate && 
-           f.result.licensePlate.replace(/\s/g, '').toUpperCase() === analyzedEntry.result?.licensePlate?.replace(/\s/g, '').toUpperCase()) ||
-          (f.result?.firstName && f.result?.lastName && 
-           f.result.firstName.toLowerCase() === analyzedEntry.result?.firstName?.toLowerCase() &&
-           f.result.lastName.toLowerCase() === analyzedEntry.result?.lastName?.toLowerCase())
+           f.result.licensePlate.replace(/\s/g, '').toUpperCase() === analyzedEntry.result?.licensePlate?.replace(/\s/g, '').toUpperCase())
         )
         
         if (inSessionDuplicate) {
           analyzedEntry.status = 'duplicate'
-          analyzedEntry.error = `Duplikat von "${inSessionDuplicate.name}" (gleiche Daten bereits in dieser Import-Liste)`
+          analyzedEntry.error = `Duplikat von "${inSessionDuplicate.name}" (aus dieser Session)`
           analyzedEntry.duplicateInfo = { matches: [] }
+          
+           // Auto-Correction specific logic for THIS session duplicates could go here
         } else {
-          // Add to session tracking for future duplicate checks
+          // Add to session tracking
           analyzedInSession.push(analyzedEntry)
         }
       }
@@ -464,14 +477,14 @@ export default function BulkImport() {
       }
 
       // Update with result
+      // This is the heavy part: setFiles triggers React Reconciliation for 1000 items.
       setFiles(prev => prev.map(f => 
         f.id === entry.id ? analyzedEntry : f
       ))
 
-      // Small delay between files to not overwhelm the API
-      if (i < pendingFiles.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500))
-      }
+      // Yield to main thread to allow UI updates and prevent freezing
+      // For large lists, a longer timeout gives the browser more time to paint.
+      await new Promise(resolve => setTimeout(resolve, 50))
     }
 
     setIsProcessing(false)

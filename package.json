@@ -1,6 +1,6 @@
 {
   "name": "kfz-werkstatt-app",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "KFZ Werkstatt Management Software",
   "main": "./out/main/index.js",
   "author": "redlabracer",

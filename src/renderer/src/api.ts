@@ -483,8 +483,23 @@ export const api = {
               });
               
               if (!response.ok) {
-                  const error = await response.json();
-                  throw new Error(error.error || 'Analyse fehlgeschlagen');
+                  let errorMessage = 'Analyse fehlgeschlagen';
+                  try {
+                    const error = await response.json();
+                    errorMessage = error.error || error.message || errorMessage;
+                  } catch (e) {
+                    // Falls Antwort kein JSON ist (z.B. HTML Fehlerseite 413, 502, etc.)
+                    console.error('Non-JSON Analysis Error:', response.status, response.statusText);
+                    const text = await response.text();
+                    // Wenn HTML, versuche Titel zu extrahieren oder nutze Status
+                    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+                        errorMessage = `Server Error (${response.status}): ${response.statusText}`;
+                        if (response.status === 413) errorMessage = 'Datei ist zu groß für den Upload (413 Payload Too Large).';
+                    } else {
+                        errorMessage = text.substring(0, 100) || errorMessage;
+                    }
+                  }
+                  throw new Error(errorMessage);
               }
               return response.json();
           }

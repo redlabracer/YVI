@@ -71,7 +71,7 @@ app.use('/api', (req, res, next) => {
   
   if (!authHeader) {
     res.setHeader('WWW-Authenticate', 'Basic realm="Werkstatt Login"')
-    return res.status(401).send('Authentifizierung erforderlich')
+    return res.status(401).json({ error: 'Authentifizierung erforderlich' })
   }
 
   // Entschlüssele den Header
@@ -83,7 +83,7 @@ app.use('/api', (req, res, next) => {
     return next()
   } else {
     res.setHeader('WWW-Authenticate', 'Basic realm="Werkstatt Login"')
-    return res.status(401).send('Falsches Passwort')
+    return res.status(401).json({ error: 'Falsches Passwort' })
   }
 })
 // ------------------------------------------------
@@ -123,7 +123,8 @@ app.use((req, res, next) => {
   // Wenn die API schon behandelt wurde, sind wir hier flasch. Aber app.use greift immer.
   // Prüfen ob es eine API Anfrage ist
   if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
-    return next()
+    // Falls keine Route gematcht hat -> 404 JSON (statt index.html oder text)
+    return res.status(404).json({ error: `Route nicht gefunden: ${req.method} ${req.path}` })
   }
   
   // Wenn Datei nicht gefunden, index.html senden (SPA Fallback)

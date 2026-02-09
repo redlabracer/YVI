@@ -400,92 +400,96 @@ export default function BulkImport() {
     // Track analyzed entries in this session for duplicate detection
     const analyzedInSession: FileEntry[] = [...files.filter(f => f.status === 'success' && f.result)]
     
-    // Process files one-by-one with delays to prevent UI freezing
-    for (let i = 0; i < pendingFiles.length; i++) {
-      // Check if cancelled
-      if (abortControllerRef.current?.signal.aborted) {
-        break
+    // Concurrent Processing
+    const CONCURRENCY_LIMIT = 5;
+    let poolIndex = 0;
+    
+    const processNext = async () => {
+      // Check limits
+      if (poolIndex >= pendingFiles.length || abortControllerRef.current?.signal.aborted || isCancelled) {
+        return;
       }
+
+      // Claim next item atomically-ish (JS single thread makes 'poolIndex++' safe)
+      const currentIndex = poolIndex++;
+      const entry = pendingFiles[currentIndex];
+
+      // Update UI (mark as analyzing)
+      // Since we run in parallel, we don't want to re-render the whole list 5 times at once.
+      // But for feedback it is needed. We trust React tobatch updates slightly.
+      setCurrentIndex(files.findIndex(f => f.id === entry.id)); // Just for progress awareness, imperfect in parallel
       
-      const entry = pendingFiles[i]
-      
-      // Update current index for Progress Bar (without re-rendering full list if possible)
-      // setCurrentIndex causes re-render. Maybe limit it?
-      setCurrentIndex(files.findIndex(f => f.id === entry.id))
-      
-      // Update status to analyzing
-      // This triggers a re-render of the list. 
       setFiles(prev => prev.map(f => 
         f.id === entry.id ? { ...f, status: 'analyzing' } : f
-      ))
-      
-      // Force UI update
-      await new Promise(resolve => setTimeout(resolve, 0));
+      ));
 
-      // Analyze the file
+      // Analyze
       let analyzedEntry: FileEntry;
       try {
         analyzedEntry = await analyzeFile(entry);
       } catch(e) {
           analyzedEntry = { ...entry, status: 'error', error: 'System error during analysis' };
       }
-      
-      // Check for API key error
+
+      // Check for Abort after slow network request
+      if (abortControllerRef.current?.signal.aborted) return;
+
+      // Handle Critical Error (Auth)
       if (analyzedEntry.status === 'error' && 
           (analyzedEntry.error?.toLowerCase().includes('api') || 
            analyzedEntry.error?.toLowerCase().includes('key') ||
            analyzedEntry.error?.toLowerCase().includes('unauthorized') ||
            analyzedEntry.error?.toLowerCase().includes('401'))) {
-        setApiKeyMissing(true)
-        // Revert to pending so user can retry after adding key
+        
+        setApiKeyMissing(true);
+        abortControllerRef.current?.abort(); // Stop all other workers
+        
         setFiles(prev => prev.map(f => 
-          f.id === entry.id ? { ...f, status: 'pending', error: undefined } : f
-        ))
-        break
+          f.id === entry.id ? { ...f, status: 'pending', error: 'Auth Error - Stopped' } : f
+        ));
+        return;
       }
 
-
-      // Check for in-session duplicates (same data from different files in this import)
+      // Duplicate Check (Synchronous Block)
       if (analyzedEntry.status === 'success' && analyzedEntry.result) {
-        // OPTIMIZATION: Only search recent matches if list is huge? No, duplicates are important.
-        // But doing this find on 1000 items 1000 times is 1,000,000 ops. 
-        // With 1400 files it is fine for modern JS engines.
+        // Fast in-memory check
         const inSessionDuplicate = analyzedInSession.find(f => 
           (f.result?.licensePlate && analyzedEntry.result?.licensePlate && 
            f.result.licensePlate.replace(/\s/g, '').toUpperCase() === analyzedEntry.result?.licensePlate?.replace(/\s/g, '').toUpperCase())
-        )
+        );
         
         if (inSessionDuplicate) {
-          analyzedEntry.status = 'duplicate'
-          analyzedEntry.error = `Duplikat von "${inSessionDuplicate.name}" (aus dieser Session)`
-          analyzedEntry.duplicateInfo = { matches: [] }
-          
-           // Auto-Correction specific logic for THIS session duplicates could go here
+          analyzedEntry.status = 'duplicate';
+          analyzedEntry.error = `Duplikat von "${inSessionDuplicate.name}" (aus dieser Session)`;
+          analyzedEntry.duplicateInfo = { matches: [] };
         } else {
-          // Add to session tracking
-          analyzedInSession.push(analyzedEntry)
+          analyzedInSession.push(analyzedEntry);
         }
       }
-      
-      // If auto-create is enabled and analysis was successful, create customer
+
+      // Auto-Create (Async but safe)
       if (autoCreate && analyzedEntry.status === 'success') {
-        const customerId = await createCustomer(analyzedEntry)
-        analyzedEntry.customerId = customerId || undefined
+        const customerId = await createCustomer(analyzedEntry);
+        analyzedEntry.customerId = customerId || undefined;
       }
 
-      // Update with result
-      // This is the heavy part: setFiles triggers React Reconciliation for 1000 items.
+      // Update Result
       setFiles(prev => prev.map(f => 
         f.id === entry.id ? analyzedEntry : f
-      ))
+      ));
 
-      // Yield to main thread to allow UI updates and prevent freezing
-      // For large lists, a longer timeout gives the browser more time to paint.
-      await new Promise(resolve => setTimeout(resolve, 50))
+      // Continue with next item in queue
+      await processNext();
+    };
+
+    // Start Workers
+    const workers = [];
+    for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, pendingFiles.length); i++) {
+        workers.push(processNext());
     }
 
-    setIsProcessing(false)
-    setCurrentIndex(-1)
+    // Wait for all to finish
+    await Promise.all(workers);
     abortControllerRef.current = null
   }
 

@@ -483,7 +483,7 @@ export default function BulkImport() {
     };
 
     // Start Workers
-    const workers = [];
+    const workers: Promise<void>[] = [];
     for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, pendingFiles.length); i++) {
         workers.push(processNext());
     }

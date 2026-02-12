@@ -42,15 +42,6 @@ interface PersistedState {
   showPreview: boolean
 }
 
-// Helper to convert File to base64
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = error => reject(error)
-  })
-}
 
 // Helper to convert base64 to File
 const base64ToFile = (base64: string, filename: string): File => {

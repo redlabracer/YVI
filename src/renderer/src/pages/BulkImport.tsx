@@ -546,7 +546,7 @@ export default function BulkImport() {
 
     for (const entry of successfulEntries) {
       const customerId = await createCustomer(entry)
-      if (customerId) {
+      if (customerId && typeof customerId === 'number') {
         setFiles(prev => prev.map(f => 
           f.id === entry.id ? { ...f, customerId } : f
         ))

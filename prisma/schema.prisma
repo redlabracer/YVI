@@ -100,6 +100,7 @@ model Settings {
   googleModel String? @default("gemini-2.0-flash") // Google Model: gemini-2.0-flash, gemini-2.0-pro, gemini-1.5-pro
   aiProvider String? @default("openai") // selected AI provider: 'openai' or 'google'
   aiPrompt  String? // Custom AI Prompt for document analysis
+  bulkAnalysisConcurrency Int @default(5) // Number of concurrent analyses (Web usually 5, Desktop default 3)
   carPartsUser String? // Car Parts Catalog Username
   carPartsPass String? // Car Parts Catalog Password
   conradUser   String? // Conrad Username

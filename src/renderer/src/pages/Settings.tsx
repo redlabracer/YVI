@@ -20,6 +20,7 @@ export default function Settings() {
   const [lexwareUser, setLexwareUser] = useState('')
   const [lexwarePass, setLexwarePass] = useState('')
   const [autoSync, setAutoSync] = useState(false)
+  const [bulkAnalysisConcurrency, setBulkAnalysisConcurrency] = useState(5)
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [status, setStatus] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null)
   const [loading, setLoading] = useState(false)
@@ -101,6 +102,8 @@ WICHTIG:
           if (settings.googleModel) setGoogleModel(settings.googleModel)
           // @ts-ignore
           if (settings.aiProvider) setAiProvider(settings.aiProvider)
+          // @ts-ignore
+          if (settings.bulkAnalysisConcurrency) setBulkAnalysisConcurrency(settings.bulkAnalysisConcurrency)
           
           if (settings.aiPrompt) setAiPrompt(settings.aiPrompt)
           if (settings.carPartsUser) setCarPartsUser(settings.carPartsUser)
@@ -130,6 +133,7 @@ WICHTIG:
         openaiModel,
         googleApiKey,        googleModel,        aiProvider,
         aiPrompt: aiPrompt || defaultAiPrompt,
+        bulkAnalysisConcurrency,
         carPartsUser, 
         carPartsPass, 
         lexwareUser, 
@@ -489,6 +493,33 @@ WICHTIG:
           </div>
 
           <div className="space-y-4">
+
+            {/* Performance Settings */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Massen-Import Performance</label>
+                  <span className="w-12 text-center font-mono text-sm font-bold bg-white dark:bg-gray-800 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-600 dark:text-white">
+                    {bulkAnalysisConcurrency}x
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="10" 
+                      step="1"
+                      value={bulkAnalysisConcurrency}
+                      onChange={(e) => setBulkAnalysisConcurrency(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-600"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                  Anzahl gleichzeitiger Analysen. Höhere Werte sind schneller, benötigen aber mehr Internet-Bandbreite.
+                  (Empfohlen: Desktop = 2-3, Web/Server = 5)
+                </p>
+            </div>
             
             {/* AI Provider Selection */}
             <div>

@@ -74,6 +74,7 @@ export default function BulkImport() {
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [showPreview, setShowPreview] = useState(true)
   const [autoCreate, setAutoCreate] = useState(false)
+  const [concurrency, setConcurrency] = useState(5)
   const [apiKeyMissing, setApiKeyMissing] = useState(false)
   const [isCancelled, setIsCancelled] = useState(false)
   
@@ -108,6 +109,13 @@ export default function BulkImport() {
         console.error('Error restoring bulk import state:', err)
       }
     }
+
+    // Load Concurrency Settings
+    api.settings.get().then(s => {
+      if (s && s.bulkAnalysisConcurrency) {
+        setConcurrency(s.bulkAnalysisConcurrency)
+      }
+    }).catch(console.error)
   }, [])
 
   // Persist state on changes
@@ -243,7 +251,7 @@ export default function BulkImport() {
     }
   }
 
-  const createCustomer = async (entry: FileEntry, skipDuplicateCheck: boolean = false): Promise<number | null> => {
+  const createCustomer = async (entry: FileEntry, skipDuplicateCheck: boolean = false, interactive: boolean = true): Promise<number | null | 'DUPLICATE'> => {
     if (!entry.result || !entry.result.lastName) {
       return null
     }
@@ -285,6 +293,19 @@ export default function BulkImport() {
              }
           }
 
+          if (!interactive) {
+            // In batch mode, we don't block. We mark it as duplicate and let the user resolve later.
+            // We need to attach the matches to the entry, enabling the UI to show them later.
+            // But createCustomer returns ID/status. The update of the entry object (with duplicateInfo)
+            // must happen outside or be returned here.
+            // We return 'DUPLICATE' and the caller handles updating the entry with duplicateCheck.matches
+            // Wait, caller doesn't have duplicateCheck.matches unless we return it.
+            // Let's attach it to the entry object passed by reference? 
+            // JavaScript objects are references, so yes.
+            entry.duplicateInfo = { matches: duplicateCheck.matches };
+            return 'DUPLICATE';
+          }
+
           console.log('Ambiguous duplicate found! Showing modal...')
           // Show duplicate modal and wait for user decision
           return new Promise((resolve) => {
@@ -299,8 +320,8 @@ export default function BulkImport() {
                 resolve(null)
               } else if (action === 'create') {
                 // Force create (skip duplicate check)
-                const id = await createCustomer(entry, true)
-                resolve(id)
+                const id = await createCustomer(entry, true, true)
+                resolve(id as number)
               } else if (action === 'add-vehicle' && customerId) {
                 // Add vehicle to existing customer
                 const vehicleId = await addVehicleToCustomer(entry, customerId)
@@ -401,7 +422,7 @@ export default function BulkImport() {
     const analyzedInSession: FileEntry[] = [...files.filter(f => f.status === 'success' && f.result)]
     
     // Concurrent Processing
-    const CONCURRENCY_LIMIT = 5;
+    const CONCURRENCY_LIMIT = concurrency;
     let poolIndex = 0;
     
     const processNext = async () => {
@@ -469,8 +490,16 @@ export default function BulkImport() {
 
       // Auto-Create (Async but safe)
       if (autoCreate && analyzedEntry.status === 'success') {
-        const customerId = await createCustomer(analyzedEntry);
-        analyzedEntry.customerId = customerId || undefined;
+        // Use non-interactive mode (pass false as 3rd arg) to avoid blocking modals
+        const result = await createCustomer(analyzedEntry, false, false);
+        
+        if (result === 'DUPLICATE') {
+           analyzedEntry.status = 'duplicate';
+           analyzedEntry.error = 'Duplikat gefunden (Prüfung erforderlich)';
+           // duplicateInfo matches are attached by createCustomer side-effect
+        } else if (result) {
+           analyzedEntry.customerId = result as number;
+        }
       }
 
       // Update Result
@@ -525,6 +554,36 @@ export default function BulkImport() {
     }
 
     setIsProcessing(false)
+  }
+
+
+  const resolveDuplicate = (entry: FileEntry) => {
+    if (!entry.duplicateInfo || !entry.duplicateInfo.matches) return;
+    
+    setCurrentDuplicateEntry(entry);
+    setDuplicateMatches(entry.duplicateInfo.matches);
+    
+    setDuplicateResolveCallback(() => async (action: 'create' | 'skip' | 'add-vehicle', customerId?: number) => {
+      setShowDuplicateModal(false);
+      setCurrentDuplicateEntry(null);
+      setDuplicateMatches([]);
+
+      if (action === 'skip') {
+          // User chose to skip. We leave it as duplicate or potentially remove it?
+          // For now, leave as is.
+      } else if (action === 'create') {
+           const id = await createCustomer(entry, true, true);
+           if (id && typeof id === 'number') {
+             setFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: 'success', customerId: id, error: undefined } : f));
+           }
+      } else if (action === 'add-vehicle' && customerId) {
+           const vehicleId = await addVehicleToCustomer(entry, customerId);
+           if (vehicleId) {
+             setFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: 'success', customerId, error: undefined } : f));
+           }
+      }
+    });
+    setShowDuplicateModal(true);
   }
 
   const createdCount = files.filter(f => f.customerId).length
@@ -762,10 +821,18 @@ export default function BulkImport() {
                       )}
                       
                       {/* Duplicate Warning */}
-                      {entry.status === 'duplicate' && entry.error && (
-                        <div className="mt-2 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                          <AlertTriangle className="w-4 h-4" />
-                          {entry.error}
+                      {entry.status === 'duplicate' && (
+                        <div className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+                           <div className="flex items-center gap-2">
+                             <AlertTriangle className="w-4 h-4" />
+                             {entry.error}
+                           </div>
+                           <button
+                              onClick={() => resolveDuplicate(entry)}
+                              className="mt-2 text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-1 rounded transition-colors"
+                           >
+                              Duplikat lösen
+                           </button>
                         </div>
                       )}
 

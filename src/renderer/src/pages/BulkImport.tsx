@@ -120,29 +120,33 @@ export default function BulkImport() {
 
   // Persist state on changes
   useEffect(() => {
+    // Optimization: Don't persist during active processing to save memory/CPU
+    // Also, NEVER persist file content (base64) as it crashes the app with QuotaExceeded or OOM
+    if (isProcessing) return;
+
     const persistState = async () => {
-      // Convert File objects to base64 for pending files
-      const filesToPersist: Omit<FileEntry, 'file'>[] = await Promise.all(
-        files.map(async f => {
-          const { file, ...rest } = f
-          if (file && f.status === 'pending') {
-            const fileData = await fileToBase64(file)
-            return { ...rest, fileData }
-          }
+      // Only persist metadata, NOT the file content
+      const filesToPersist: Omit<FileEntry, 'file'>[] = files.map(f => {
+          const { file, fileData, ...rest } = f
+          // We intentionally drop 'file' and 'fileData' to avoid OOM
+          // If page reloads, pending files are lost, but analyzed ones remain.
           return rest
-        })
-      )
+      })
       
       const state: PersistedState = {
         files: filesToPersist,
         autoCreate,
         showPreview
       }
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      } catch (e) {
+        console.warn('Failed to persist bulk import state (likely quota exceeded):', e)
+      }
     }
     
     persistState()
-  }, [files, autoCreate, showPreview])
+  }, [files, autoCreate, showPreview, isProcessing])
   
   // Stats
   const totalFiles = files.length

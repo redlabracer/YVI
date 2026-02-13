@@ -582,16 +582,16 @@ WICHTIG:
             {aiProvider === 'google' && (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Google API Key (Gemini)</label>
-                  <input 
-                    type="password" 
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Google API Keys (Gemini)</label>
+                  <textarea 
                     value={googleApiKey}
                     onChange={(e) => setGoogleApiKey(e.target.value)}
+                    rows={3}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm text-gray-900 dark:text-white"
-                    placeholder="AIza..."
+                    placeholder={`AIza...\nAIza...\n(Ein Key pro Zeile für Auto-Rotation)`}
                   />
                   <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                    Kostenlos im Google AI Studio verfügbar (Rate-Limited).
+                    Sie können mehrere API-Keys (einen pro Zeile) eingeben. Das System wechselt automatisch bei Rate-Limits (429).
                   </p>
                 </div>
 

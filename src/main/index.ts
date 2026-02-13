@@ -971,10 +971,14 @@ Instruction: Extract street, zip, city.
         throw new Error('Kein Google AI API Key in den Einstellungen gefunden.')
       }
 
-      const genAI = new GoogleGenerativeAI(settings.googleApiKey)
-      const modelName = settings.googleModel || 'gemini-1.5-pro'
-      const model = genAI.getGenerativeModel({ model: modelName })
+      // Parse keys (split by newline or comma)
+      const apiKeys = settings.googleApiKey.split(/[\n,]+/).map(k => k.trim()).filter(k => k.length > 0)
+      
+      if (apiKeys.length === 0) {
+         throw new Error('Kein gültiger Google AI Key gefunden.')
+      }
 
+      const modelName = settings.googleModel || 'gemini-1.5-pro'
       const imagePart = {
         inlineData: {
           data: base64Image,
@@ -982,12 +986,46 @@ Instruction: Extract street, zip, city.
         },
       }
 
-      console.log(`[AI] Sending request to Google Gemini (${modelName})...`)
+      let lastError = null;
+      let success = false;
+      let resultText = '';
+
+      // Try keys in round-robin fashion until one works
+      for (let i = 0; i < apiKeys.length; i++) {
+        const currentKey = apiKeys[i];
+        
+        // Define genAI instance inside loop to use current key
+        const genAI = new GoogleGenerativeAI(currentKey)
+        const model = genAI.getGenerativeModel({ model: modelName })
+        
+        try {
+          console.log(`[AI] Sending request to Google Gemini (${modelName}) using Key #${i+1}...`)
+          const aiResponse = await model.generateContent([systemPrompt, imagePart])
+          resultText = aiResponse.response.text()
+          success = true;
+          break; // Exit loop on success
+        } catch (error: any) {
+          console.warn(`[AI] Key #${i+1} failed: ${error.message} (${error.status || 'unknown status'})`)
+          
+          lastError = error;
+          
+          // If it's NOT a rate limit error (429) or quota error (403), we might want to stop?
+          // But "Resource Exhausted" is typically 429.
+          // Let's iterate all keys for safety.
+          
+          if (i < apiKeys.length - 1) {
+             console.log(`[AI] Switching to next API Key...`)
+             // Optional: Add small delay before switching
+             await new Promise(r => setTimeout(r, 1000)); 
+          }
+        }
+      }
+
+      if (!success) {
+        throw lastError || new Error('Alle Google API Keys sind fehlgeschlagen.');
+      }
       
-      const aiResponse = await model.generateContent([systemPrompt, imagePart])
-      const text = aiResponse.response.text()
-      
-      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim()
+      const jsonStr = resultText.replace(/```json/g, '').replace(/```/g, '').trim()
       result = JSON.parse(jsonStr)
 
     } else {

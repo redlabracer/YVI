@@ -515,12 +515,17 @@ export default function BulkImport() {
     // Wait for all to finish
     await Promise.all(workers);
     abortControllerRef.current = null
+    setIsProcessing(false) // <--- FIXED: Re-enable buttons after detailed worker loop
   }
 
   const handleCancelAnalysis = () => {
     if (abortControllerRef.current) {
+      // Abort active fetches
       abortControllerRef.current.abort()
+      
+      // Update State
       setIsCancelled(true)
+      setIsProcessing(false) // <--- FIXED: Immediately unlock UI
       
       // Revert any "analyzing" files back to "pending"
       setFiles(prev => prev.map(f => 

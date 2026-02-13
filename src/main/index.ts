@@ -1009,12 +1009,23 @@ Instruction: Extract street, zip, city.
           
           lastError = error;
           
-          // If it's NOT a rate limit error (429) or quota error (403), we might want to stop?
-          // But "Resource Exhausted" is typically 429.
-          // Let's iterate all keys for safety.
+          // CRITICAL: Google Library Rate Limit is often 429
+          // But sometimes it wraps it in a bigger object.
+          // We check for "429" in status OR message
+          const isRateLimit = error.status === 429 || 
+                              error.message?.includes('429') || 
+                              error.message?.includes('Quota') || 
+                              error.message?.includes('limit');
+
+          if (isRateLimit) {
+              console.log(`[AI] Rate Limit hit for Key #${i+1}. Switching...`)
+          } else {
+             // If other error (e.g. 400 Bad Request, 500 Server Error), we still try next key just in case
+             // but maybe log differently.
+             console.log(`[AI] Error (not explicitly rate limit) for Key #${i+1}. Switching anyway...`)
+          }
           
           if (i < apiKeys.length - 1) {
-             console.log(`[AI] Switching to next API Key...`)
              // Optional: Add small delay before switching
              await new Promise(r => setTimeout(r, 1000)); 
           }

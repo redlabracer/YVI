@@ -119,12 +119,23 @@ Instruction: Extract street, zip, city.
         return res.status(400).json({ error: 'Kein Google AI API Key in den Einstellungen gefunden.' });
       }
 
-      const genAI = new GoogleGenerativeAI(settings.googleApiKey);
+      // Parse keys (split by newline, comma, or whitespace)
+      let rawInput = settings.googleApiKey;
+      rawInput = rawInput.replace(/[\[\]]/g, ''); // Remove JSON brackets if presents
+      
+      const finalApiKeys = rawInput
+        .split(/[\n,\s]+/)
+        .map(k => k.trim())
+        .map(k => k.replace(/['"]/g, ''))
+        .filter(k => k.length > 20);
+
+      if (finalApiKeys.length === 0) {
+        return res.status(400).json({ error: 'Kein gültiger Google AI Key gefunden.' });
+      }
+
       // Use selected model or default to gemini-2.0-flash
       const modelName = settings.googleModel || 'gemini-2.0-flash'; 
-      console.log(`[AI] Using Google Model: ${modelName}`);
-      
-      const model = genAI.getGenerativeModel({ model: modelName });
+      console.log(`[AI] Using Google Model: ${modelName} with ${finalApiKeys.length} available keys`);
 
       const imagePart = {
         inlineData: {
@@ -133,11 +144,51 @@ Instruction: Extract street, zip, city.
         },
       };
 
-      const aiResponse = await model.generateContent([systemPrompt, imagePart]);
-      const text = aiResponse.response.text();
+      let lastError = null;
+      let success = false;
+      let resultText = '';
+
+      // Round-robin / Failover logic
+      for (let i = 0; i < finalApiKeys.length; i++) {
+        const currentKey = finalApiKeys[i];
+        
+        // Create instance for THIS key
+        const genAI = new GoogleGenerativeAI(currentKey);
+        const model = genAI.getGenerativeModel({ model: modelName });
+
+        try {
+          console.log(`[AI] Sending request to Google Gemini (${modelName}) using Key #${i+1}...`);
+          const aiResponse = await model.generateContent([systemPrompt, imagePart]);
+          resultText = aiResponse.response.text();
+          success = true;
+          break; // Success!
+        } catch (error: any) {
+          console.warn(`[AI] Key #${i+1} failed: ${error.message}`);
+          lastError = error;
+
+          const isRateLimit = error.status === 429 || 
+                              error.message?.includes('429') || 
+                              error.message?.includes('Quota') || 
+                              error.message?.includes('limit');
+
+          if (isRateLimit) {
+              console.log(`[AI] Rate Limit hit for Key #${i+1}. Switching...`);
+          } else {
+              console.log(`[AI] Error for Key #${i+1}. Switching anyway...`);
+          }
+          
+          if (i < finalApiKeys.length - 1) {
+             await new Promise(r => setTimeout(r, 1000)); 
+          }
+        }
+      }
+
+      if (!success) {
+        throw lastError || new Error('Alle Google API Keys sind fehlgeschlagen.');
+      }
       
       // Clean up markdown code blocks if Gemini adds them
-      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const jsonStr = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
       result = JSON.parse(jsonStr);
 
     } else {

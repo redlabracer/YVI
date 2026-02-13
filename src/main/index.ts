@@ -971,31 +971,20 @@ Instruction: Extract street, zip, city.
         throw new Error('Kein Google AI API Key in den Einstellungen gefunden.')
       }
 
-      // Parse keys (split by newline or comma)
-      // IMPORTANT: Remove any enclosing quotes that might have been pasted, and spaces
-      let cleanedKeyString = settings.googleApiKey;
-      // If the user pasted the entire list "key1, key2" including quotes, strip them
-      cleanedKeyString = cleanedKeyString.replace(/^["']|["']$/g, '');
+      // Parse keys (split by newline, comma, or whitespace)
+      // Robust parsing to handle "Key1 Key2", "Key1,Key2", "Key1\nKey2", or even `["Key1", "Key2"]`
+      let rawInput = settings.googleApiKey;
+      // Remove common array brackets if user pasted a JSON list
+      rawInput = rawInput.replace(/[\[\]]/g, '');
       
-      const apiKeys = cleanedKeyString
-        .split(/[\n,]+/)
+      const finalApiKeys = rawInput
+        .split(/[\n,\s]+/) // Split by newline, comma, OR whitespace characters
         .map(k => k.trim())
-        .map(k => k.replace(/['"]/g, '')) // Remove quotes inside keys
-        .filter(k => k.length > 0 && !k.startsWith('AIza') || k.length > 20) // Simple validation: Gemini keys start with AIza usually, but let's just enable all non-empty long strings
-        // Actually, just filtering empty is enough, users might have weird keys.
-        // But the error `Headers.append: "..."` means one key WAS the whole list.
-        // This implies the split char was missing or regex failed.
-        // If the user separated by just spaces? "key1 key2"?
-        
-      // Also try splitting by space if we only found 1 key and it's super long (>80 chars)
-      // Gemini keys are usually ~39 chars.
-      let finalApiKeys = apiKeys;
-      if (apiKeys.length === 1 && apiKeys[0].length > 60 && apiKeys[0].includes(' ')) {
-         finalApiKeys = apiKeys[0].split(/\s+/).map(k => k.trim()).filter(k => k.length > 0);
-      }
+        .map(k => k.replace(/['"]/g, '')) // Remove any remaining quotes
+        .filter(k => k.length > 20); // Filter out empty strings or obvious garbage (Gemini keys are ~39 chars)
 
       if (finalApiKeys.length === 0) {
-         throw new Error('Kein gültiger Google AI Key gefunden.')
+         throw new Error('Kein gültiger Google AI Key gefunden. Bitte prüfen Sie die Einstellungen.')
       }
 
       const modelName = settings.googleModel || 'gemini-1.5-pro'

@@ -519,19 +519,21 @@ export default function BulkImport() {
   }
 
   const handleCancelAnalysis = () => {
+    // Force reset even if ref is null, just in case
+    setIsCancelled(true)
+    setIsProcessing(false)
+    
     if (abortControllerRef.current) {
-      // Abort active fetches
       abortControllerRef.current.abort()
-      
-      // Update State
-      setIsCancelled(true)
-      setIsProcessing(false) // <--- FIXED: Immediately unlock UI
-      
-      // Revert any "analyzing" files back to "pending"
-      setFiles(prev => prev.map(f => 
-        f.status === 'analyzing' ? { ...f, status: 'pending' } : f
-      ))
+      abortControllerRef.current = null
     }
+
+    // Delay the state update slightly to allow the UI to unblock first
+    setTimeout(() => {
+        setFiles(prev => prev.map(f => 
+            f.status === 'analyzing' ? { ...f, status: 'pending' } : f
+        ))
+    }, 0)
   }
 
   const handleCreateAllCustomers = async () => {

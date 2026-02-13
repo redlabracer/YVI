@@ -972,9 +972,29 @@ Instruction: Extract street, zip, city.
       }
 
       // Parse keys (split by newline or comma)
-      const apiKeys = settings.googleApiKey.split(/[\n,]+/).map(k => k.trim()).filter(k => k.length > 0)
+      // IMPORTANT: Remove any enclosing quotes that might have been pasted, and spaces
+      let cleanedKeyString = settings.googleApiKey;
+      // If the user pasted the entire list "key1, key2" including quotes, strip them
+      cleanedKeyString = cleanedKeyString.replace(/^["']|["']$/g, '');
       
-      if (apiKeys.length === 0) {
+      const apiKeys = cleanedKeyString
+        .split(/[\n,]+/)
+        .map(k => k.trim())
+        .map(k => k.replace(/['"]/g, '')) // Remove quotes inside keys
+        .filter(k => k.length > 0 && !k.startsWith('AIza') || k.length > 20) // Simple validation: Gemini keys start with AIza usually, but let's just enable all non-empty long strings
+        // Actually, just filtering empty is enough, users might have weird keys.
+        // But the error `Headers.append: "..."` means one key WAS the whole list.
+        // This implies the split char was missing or regex failed.
+        // If the user separated by just spaces? "key1 key2"?
+        
+      // Also try splitting by space if we only found 1 key and it's super long (>80 chars)
+      // Gemini keys are usually ~39 chars.
+      let finalApiKeys = apiKeys;
+      if (apiKeys.length === 1 && apiKeys[0].length > 60 && apiKeys[0].includes(' ')) {
+         finalApiKeys = apiKeys[0].split(/\s+/).map(k => k.trim()).filter(k => k.length > 0);
+      }
+
+      if (finalApiKeys.length === 0) {
          throw new Error('Kein gültiger Google AI Key gefunden.')
       }
 
@@ -991,8 +1011,8 @@ Instruction: Extract street, zip, city.
       let resultText = '';
 
       // Try keys in round-robin fashion until one works
-      for (let i = 0; i < apiKeys.length; i++) {
-        const currentKey = apiKeys[i];
+      for (let i = 0; i < finalApiKeys.length; i++) {
+        const currentKey = finalApiKeys[i];
         
         // Define genAI instance inside loop to use current key
         const genAI = new GoogleGenerativeAI(currentKey)
@@ -1025,7 +1045,7 @@ Instruction: Extract street, zip, city.
              console.log(`[AI] Error (not explicitly rate limit) for Key #${i+1}. Switching anyway...`)
           }
           
-          if (i < apiKeys.length - 1) {
+          if (i < finalApiKeys.length - 1) {
              // Optional: Add small delay before switching
              await new Promise(r => setTimeout(r, 1000)); 
           }

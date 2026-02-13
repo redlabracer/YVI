@@ -6,6 +6,9 @@ import { join, extname } from 'path';
 import fs from 'fs';
 import multer from 'multer';
 
+// Globaler Index für Round-robin Key Rotation (Google Gemini)
+let googleKeyIndex = 0;
+
 // Configure multer for document uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -149,7 +152,11 @@ Instruction: Extract street, zip, city.
       let resultText = '';
 
       // Round-robin / Failover logic
-      for (let i = 0; i < finalApiKeys.length; i++) {
+      const startIndex = googleKeyIndex % finalApiKeys.length;
+      googleKeyIndex = (googleKeyIndex + 1) % finalApiKeys.length;
+
+      for (let attempt = 0; attempt < finalApiKeys.length; attempt++) {
+        const i = (startIndex + attempt) % finalApiKeys.length;
         const currentKey = finalApiKeys[i];
         
         // Create instance for THIS key
@@ -177,7 +184,7 @@ Instruction: Extract street, zip, city.
               console.log(`[AI] Error for Key #${i+1}. Switching anyway...`);
           }
           
-          if (i < finalApiKeys.length - 1) {
+          if (attempt < finalApiKeys.length - 1) {
              await new Promise(r => setTimeout(r, 1000)); 
           }
         }

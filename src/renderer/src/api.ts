@@ -485,19 +485,25 @@ export const api = {
               if (!response.ok) {
                   let errorMessage = 'Analyse fehlgeschlagen';
                   try {
-                    const error = await response.json();
-                    errorMessage = error.error || error.message || errorMessage;
-                  } catch (e) {
-                    // Falls Antwort kein JSON ist (z.B. HTML Fehlerseite 413, 502, etc.)
-                    console.error('Non-JSON Analysis Error:', response.status, response.statusText);
+                    // Versuche zuerst als Text zu lesen, um "Body already read" zu vermeiden
                     const text = await response.text();
-                    // Wenn HTML, versuche Titel zu extrahieren oder nutze Status
-                    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
-                        errorMessage = `Server Error (${response.status}): ${response.statusText}`;
-                        if (response.status === 413) errorMessage = 'Datei ist zu groß für den Upload (413 Payload Too Large).';
-                    } else {
-                        errorMessage = text.substring(0, 100) || errorMessage;
+                    
+                    try {
+                        // Versuche JSON zu parsen
+                        const error = JSON.parse(text);
+                        errorMessage = error.error || error.message || errorMessage;
+                    } catch (e) {
+                        // Kein JSON -> HTML oder Plain Text Fehler
+                        if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+                            errorMessage = `Server Error (${response.status}): ${response.statusText}`;
+                            if (response.status === 413) errorMessage = 'Datei ist zu groß für den Upload (413 Payload Too Large).';
+                        } else {
+                            errorMessage = text.substring(0, 100) || errorMessage;
+                        }
+                        console.error('Non-JSON Analysis Error:', response.status, errorMessage);
                     }
+                  } catch (e) {
+                    console.error('Error reading error response:', e);
                   }
                   throw new Error(errorMessage);
               }

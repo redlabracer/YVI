@@ -47,6 +47,9 @@ prisma.$on('error', (e) => {
   logger.error('Prisma Error', e)
 })
 
+// Globaler Index für Round-robin Key Rotation (Google Gemini)
+let googleKeyIndex = 0;
+
 // IPC Handlers
 ipcMain.handle('start-mobile-upload', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
@@ -1000,7 +1003,12 @@ Instruction: Extract street, zip, city.
       let resultText = '';
 
       // Try keys in round-robin fashion until one works
-      for (let i = 0; i < finalApiKeys.length; i++) {
+      const startIndex = googleKeyIndex % finalApiKeys.length;
+      // Advance the global index so the *next* request starts at the next key
+      googleKeyIndex = (googleKeyIndex + 1) % finalApiKeys.length;
+
+      for (let attempt = 0; attempt < finalApiKeys.length; attempt++) {
+        const i = (startIndex + attempt) % finalApiKeys.length;
         const currentKey = finalApiKeys[i];
         
         // Define genAI instance inside loop to use current key
@@ -1034,7 +1042,7 @@ Instruction: Extract street, zip, city.
              console.log(`[AI] Error (not explicitly rate limit) for Key #${i+1}. Switching anyway...`)
           }
           
-          if (i < finalApiKeys.length - 1) {
+          if (attempt < finalApiKeys.length - 1) {
              // Optional: Add small delay before switching
              await new Promise(r => setTimeout(r, 1000)); 
           }

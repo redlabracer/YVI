@@ -6,6 +6,22 @@ import {
 } from 'lucide-react'
 import { api } from '../api'
 
+const normalizeGoogleModel = (model?: string) => {
+  const value = (model || '').trim()
+  if (!value) return 'gemini-2.0-flash'
+
+  if (
+    value === 'gemini-3-pro-preview' ||
+    value === 'gemini-3.0-pro-preview' ||
+    value === 'gemini-3-pro-preview-latest' ||
+    value === 'gemini-3.1-pro-preview-latest'
+  ) {
+    return 'gemini-3.1-pro-preview'
+  }
+
+  return value
+}
+
 export default function Settings() {
   const { theme, toggleTheme } = useTheme()
   const [apiKey, setApiKey] = useState('')
@@ -22,6 +38,9 @@ export default function Settings() {
   const [autoSync, setAutoSync] = useState(false)
   const [bulkAnalysisConcurrency, setBulkAnalysisConcurrency] = useState(5)
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [appVersion, setAppVersion] = useState<string>('—')
+  const [latestVersion, setLatestVersion] = useState<string | null>(null)
+  const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [status, setStatus] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -87,7 +106,24 @@ WICHTIG:
 
   useEffect(() => {
     loadSettings()
+    loadAppVersion()
   }, [])
+
+  const loadAppVersion = async () => {
+    if (!isElectron) {
+      setAppVersion('Web-Modus')
+      return
+    }
+
+    try {
+      // @ts-ignore
+      const version = await window.electron.ipcRenderer.invoke('get-app-version')
+      if (version) setAppVersion(version)
+    } catch (err) {
+      console.error('Fehler beim Laden der Version:', err)
+      setAppVersion('Unbekannt')
+    }
+  }
 
   const loadSettings = async () => {
     try {
@@ -99,7 +135,7 @@ WICHTIG:
           // @ts-ignore
           if (settings.googleApiKey) setGoogleApiKey(settings.googleApiKey)
           // @ts-ignore
-          if (settings.googleModel) setGoogleModel(settings.googleModel)
+          if (settings.googleModel) setGoogleModel(normalizeGoogleModel(settings.googleModel))
           // @ts-ignore
           if (settings.aiProvider) setAiProvider(settings.aiProvider)
           // @ts-ignore
@@ -131,7 +167,9 @@ WICHTIG:
         apiKey, 
         openaiKey, 
         openaiModel,
-        googleApiKey,        googleModel,        aiProvider,
+        googleApiKey,
+        googleModel: normalizeGoogleModel(googleModel),
+        aiProvider,
         aiPrompt: aiPrompt || defaultAiPrompt,
         bulkAnalysisConcurrency,
         carPartsUser, 
@@ -195,12 +233,53 @@ WICHTIG:
     }
   }
 
+  const handleCheckForUpdates = async () => {
+    if (!isElectron) {
+      showStatus('error', 'Update-Prüfung ist nur in der Desktop-App verfügbar')
+      return
+    }
+
+    setCheckingUpdates(true)
+    showStatus('info', 'Suche nach Updates...')
+
+    try {
+      // @ts-ignore
+      const result = await window.electron.ipcRenderer.invoke('check-for-updates')
+
+      if (result?.error) {
+        showStatus('error', `Update-Prüfung fehlgeschlagen: ${result.error}`)
+        return
+      }
+
+      if (result?.latestVersion) {
+        setLatestVersion(result.latestVersion)
+      }
+
+      if (result?.updateAvailable) {
+        showStatus('success', `Update ${result.latestVersion} gefunden. Download startet automatisch...`)
+      } else {
+        const current = result?.currentVersion || appVersion
+        showStatus('info', `Keine Updates verfügbar. Aktuelle Version: ${current}`)
+      }
+    } catch (err) {
+      console.error(err)
+      showStatus('error', 'Fehler bei der Update-Prüfung')
+    } finally {
+      setCheckingUpdates(false)
+    }
+  }
+
   return (
     <div className="space-y-6 pb-10 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Einstellungen</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Verwalten Sie Ihre App-Konfiguration und Integrationen.</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Verwalten Sie Ihre App-Konfiguration und Integrationen.</p>
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              Version {appVersion}
+            </span>
+          </div>
         </div>
         {status && (
           <div className={`px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 ${
@@ -331,6 +410,39 @@ WICHTIG:
               </button>
             </div>
           </div>
+        </div>
+
+        {/* App Updates */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg">
+              <RefreshCw size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">App-Updates</h2>
+              <p className="text-gray-500 dark:text-gray-400 text-xs">Prüfen Sie manuell auf neue Versionen aus GitHub Releases.</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-700">
+            <div>
+              <h3 className="font-medium text-gray-900 dark:text-white text-sm">Aktuelle Version: {appVersion}</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
+                {latestVersion ? `Neueste gefundene Version: ${latestVersion}` : 'Noch keine manuelle Prüfung durchgeführt.'}
+              </p>
+            </div>
+            <button
+              onClick={handleCheckForUpdates}
+              disabled={checkingUpdates || !isElectron}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {checkingUpdates ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              {checkingUpdates ? 'Prüfe...' : 'Jetzt auf Updates prüfen'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+            Wenn ein Update gefunden wird, wird es automatisch heruntergeladen und beim Neustart installiert.
+          </p>
         </div>
 
         {/* Lexware Integration */}
@@ -605,8 +717,7 @@ WICHTIG:
                     <option value="gemini-2.0-flash">Gemini 2.0 Flash (Empfohlen: Schnell & Smart)</option>
                     <option value="gemini-1.5-pro">Gemini 1.5 Pro (Sehr stabil, hohe Qualität)</option>
                     <option value="gemini-1.0-pro">Gemini 1.0 Pro (Ältere Version)</option>
-                    <option value="gemini-3.0-pro-preview">Gemini 3.0 Pro (Standard naming)</option>
-                    <option value="gemini-3-pro-preview">Gemini 3 Pro Preview (Manuell)</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Neu)</option>
                   </select>
                 </div>
               </div>

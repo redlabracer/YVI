@@ -9,6 +9,36 @@ import multer from 'multer';
 // Globaler Index für Round-robin Key Rotation (Google Gemini)
 let googleKeyIndex = 0;
 
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
+const normalizeGoogleModel = (model?: string) => {
+  const value = (model || '').trim();
+  if (!value) return 'gemini-2.0-flash';
+
+  if (
+    value === 'gemini-3-pro-preview' ||
+    value === 'gemini-3.0-pro-preview' ||
+    value === 'gemini-3-pro-preview-latest' ||
+    value === 'gemini-3.1-pro-preview-latest'
+  ) {
+    return 'gemini-3.1-pro-preview';
+  }
+
+  return value;
+};
+
 // Configure multer for document uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -45,7 +75,7 @@ export const analyzeRegistrationDoc = async (req: Request, res: Response) => {
     const aiProvider = settings.aiProvider || 'openai';
 
     // Read file and convert to base64
-    const fileBuffer = fs.readFileSync(file.path);
+    const fileBuffer = await fs.promises.readFile(file.path);
     const base64Image = fileBuffer.toString('base64');
     const extension = extname(file.originalname).toLowerCase();
     
@@ -55,7 +85,7 @@ export const analyzeRegistrationDoc = async (req: Request, res: Response) => {
     if (extension === '.gif') mimeType = 'image/gif';
 
     if (extension === '.pdf') {
-      fs.unlinkSync(file.path);
+      await fs.promises.unlink(file.path).catch(() => undefined);
       return res.status(400).json({ error: 'PDF-Dateien werden aktuell nicht unterstützt. Bitte verwenden Sie ein Foto (JPG/PNG).' });
     }
 
@@ -114,7 +144,7 @@ Instruction: Extract street, zip, city.
       systemPrompt += `\nAntworte NUR im JSON-Format: { "make": "...", "model": "...", "licensePlate": "...", "vin": "...", "hsn": "...", "tsn": "...", "firstRegistration": "YYYY-MM-DD", "fuelType": "..." }`;
     }
 
-    let result = {};
+    let result: Record<string, any> = {};
 
     if (aiProvider === 'google') {
       // --- GOOGLE GEMINI IMPLEMENTATION ---
@@ -136,8 +166,7 @@ Instruction: Extract street, zip, city.
         return res.status(400).json({ error: 'Kein gültiger Google AI Key gefunden.' });
       }
 
-      // Use selected model or default to gemini-2.0-flash
-      const modelName = settings.googleModel || 'gemini-2.0-flash'; 
+      const modelName = normalizeGoogleModel(settings.googleModel || undefined);
       console.log(`[AI] Using Google Model: ${modelName} with ${finalApiKeys.length} available keys`);
 
       const imagePart = {
@@ -165,7 +194,11 @@ Instruction: Extract street, zip, city.
 
         try {
           console.log(`[AI] Sending request to Google Gemini (${modelName}) using Key #${i+1}...`);
-          const aiResponse = await model.generateContent([systemPrompt, imagePart]);
+          const aiResponse = await withTimeout(
+            model.generateContent([systemPrompt, imagePart]),
+            90_000,
+            'Google Gemini Timeout nach 90 Sekunden.'
+          );
           resultText = aiResponse.response.text();
           success = true;
           break; // Success!
@@ -205,20 +238,24 @@ Instruction: Extract street, zip, city.
       }
       const openai = new OpenAI({ apiKey: settings.openaiKey });
       
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "Extrahiere die Daten aus diesem Dokument:" },
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
-            ]
-          }
-        ],
-        response_format: { type: "json_object" }
-      });
+      const response = await withTimeout(
+        openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Extrahiere die Daten aus diesem Dokument:" },
+                { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+              ]
+            }
+          ],
+          response_format: { type: "json_object" }
+        }),
+        90_000,
+        'OpenAI Timeout nach 90 Sekunden.'
+      );
       const content = response.choices[0].message.content;
       result = JSON.parse(content || '{}');
     }
@@ -244,13 +281,15 @@ Instruction: Extract street, zip, city.
     }
 
     // Clean up uploaded file
-    fs.unlinkSync(file.path);
+    await fs.promises.unlink(file.path).catch(() => undefined);
 
     res.json(result);
 
   } catch (error: any) {
     console.error('Error analyzing document:', error);
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    if (req.file && fs.existsSync(req.file.path)) {
+      await fs.promises.unlink(req.file.path).catch(() => undefined);
+    }
 
     if (error.status === 429) return res.status(429).json({ error: 'AI Quote überschritten (Rate Limit).' });
     if (error.status === 401) return res.status(401).json({ error: 'Ungültiger API-Key.' });

@@ -1,6 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
+
+:: Lockfile erstellen (Signisiert dem Monitor, dass Update läuft)
+echo update_in_progress > "update.lock"
+
 echo --- YVI Server Update System ---
 echo.
 
@@ -67,6 +71,14 @@ if %errorlevel% neq 0 (
 echo.
 echo === Update erfolgreich abgeschlossen! ===
 echo.
+
+echo 4b. Starte Tunnel Monitor (falls nicht aktiv)...
+:: Starte Monitor minimiert (wartet 5 Min, respektiert Lockfile)
+start "" /min "start-monitor.bat"
+
 echo 5. Starte Server...
+:: Lockfile entfernen, damit Monitor arbeiten kann
+if exist "update.lock" del "update.lock"
+
 echo Druecken Sie STRG+C zum Beenden.
 call npm run serve

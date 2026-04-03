@@ -50,6 +50,22 @@ prisma.$on('error', (e) => {
 // Globaler Index für Round-robin Key Rotation (Google Gemini)
 let googleKeyIndex = 0;
 
+const normalizeGoogleModel = (model?: string) => {
+  const value = (model || '').trim()
+  if (!value) return 'gemini-2.0-flash'
+
+  if (
+    value === 'gemini-3-pro-preview' ||
+    value === 'gemini-3.0-pro-preview' ||
+    value === 'gemini-3-pro-preview-latest' ||
+    value === 'gemini-3.1-pro-preview-latest'
+  ) {
+    return 'gemini-3.1-pro-preview'
+  }
+
+  return value
+}
+
 // IPC Handlers
 ipcMain.handle('start-mobile-upload', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
@@ -990,7 +1006,7 @@ Instruction: Extract street, zip, city.
          throw new Error('Kein gültiger Google AI Key gefunden. Bitte prüfen Sie die Einstellungen.')
       }
 
-      const modelName = settings.googleModel || 'gemini-1.5-pro'
+      const modelName = normalizeGoogleModel(settings.googleModel || undefined)
       const imagePart = {
         inlineData: {
           data: base64Image,

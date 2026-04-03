@@ -3,6 +3,20 @@ import prisma from '../db'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 
+const normalizeGoogleModel = (model?: unknown) => {
+  if (typeof model !== 'string') return model
+
+  const normalized = model.trim()
+  const migrationMap: Record<string, string> = {
+    'gemini-3-pro-preview': 'gemini-3.1-pro-preview',
+    'gemini-3.0-pro-preview': 'gemini-3.1-pro-preview',
+    'gemini-3-pro-preview-latest': 'gemini-3.1-pro-preview',
+    'gemini-3.1-pro-preview-latest': 'gemini-3.1-pro-preview'
+  }
+
+  return migrationMap[normalized] || normalized
+}
+
 export const getSettings = async (req: Request, res: Response) => {
   try {
     let settings = await prisma.settings.findFirst()
@@ -26,6 +40,10 @@ export const saveSettings = async (req: Request, res: Response) => {
     
     // Remove id from data if present to avoid unique constraint errors or invalid updates
     const { id, ...updateData } = data
+
+    if (Object.prototype.hasOwnProperty.call(updateData, 'googleModel')) {
+      updateData.googleModel = normalizeGoogleModel(updateData.googleModel)
+    }
 
     const existing = await prisma.settings.findFirst()
 

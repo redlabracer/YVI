@@ -143,13 +143,12 @@ export default function TireStorage() {
 
   const loadData = async () => {
     try {
-      const [customerList, spotList] = await Promise.all([
-        api.customers.getAll(),
-        api.tires.getAll()
-      ])
-      
-      setCustomers(customerList)
-      
+        const [customerListRes, spotList] = await Promise.all([
+          api.customers.getAll(),
+          api.tires.getAll()
+        ])
+
+        const customerList: any = (customerListRes as any).data || customerListRes
       // Merge initial data with DB spots
       const mergedRacks = { ...initialRackData }
       spotList.forEach((spot: any) => {

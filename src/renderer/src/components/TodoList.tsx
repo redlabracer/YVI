@@ -27,10 +27,8 @@ export default function TodoList() {
 
   const loadCustomers = async () => {
     try {
-      const data = await api.customers.getAll()
-      setCustomers(data)
-    } catch (err) {
-      console.error(err)
+        const res: any = await api.customers.getAll()
+        setCustomers(res.data || res)
     }
   }
 

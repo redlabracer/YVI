@@ -9,14 +9,30 @@ export const getCustomers = async (req: Request, res: Response) => {
 
     const skip = (page - 1) * limit;
 
-    const where = search ? {
-      OR: [
-        { firstName: { contains: search } },
-        { lastName: { contains: search } },
-        { licensePlate: { contains: search } }, // We'll handle this differently... actually wait, licensePlate is on vehicles
-        { vehicles: { some: { licensePlate: { contains: search } } } }
-      ]
-    } : {};
+    let where: any = {};
+    if (search) {
+      const searchTerms = search.split(/\s+/).filter(term => term.length > 0);
+      where.AND = searchTerms.map(term => ({
+        OR: [
+          { firstName: { contains: term } },
+          { lastName: { contains: term } },
+          { phone: { contains: term } },
+          { email: { contains: term } },
+          { address: { contains: term } },
+          { vehicles: { 
+              some: { 
+                OR: [
+                  { licensePlate: { contains: term } },
+                  { make: { contains: term } },
+                  { model: { contains: term } },
+                  { vin: { contains: term } }
+                ]
+              } 
+            } 
+          }
+        ]
+      }));
+    }
 
     const [customers, total] = await Promise.all([
       prisma.customer.findMany({

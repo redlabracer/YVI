@@ -86,8 +86,11 @@ export const createCustomer = async (req: Request, res: Response) => {
       }
     })
     res.json(customer)
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
+    if (error.code === 'P2002' && error.meta?.target?.includes('vin')) {
+      return res.status(409).json({ error: 'Ein Fahrzeug mit dieser Fahrgestellnummer (VIN) existiert bereits.', code: 'VIN_EXISTS' })
+    }
     res.status(500).json({ error: 'Fehler beim Erstellen des Kunden' })
   }
 }

@@ -415,28 +415,34 @@ export default function BulkImport() {
     
     // Track analyzed entries in this session for duplicate detection
     const analyzedInSession: FileEntry[] = [...files.filter(f => f.status === 'success' && f.result)]
-    
+
     // Concurrent Processing
     const CONCURRENCY_LIMIT = concurrency;
-    let poolIndex = 0;
-    
+    const queue = [...pendingFiles];
+    let rateLimitPauseUntil = 0;
+
     const processNext = async () => {
+      // Check if another worker hit a rate limit and paused the queue globally
+      if (rateLimitPauseUntil > Date.now()) {
+        const sleepTime = rateLimitPauseUntil - Date.now();
+        await new Promise(resolve => setTimeout(resolve, sleepTime + 1000)); // sleep until cleared + 1s stagger
+        return await processNext();
+      }
+
       // Check limits
-      if (poolIndex >= pendingFiles.length || abortControllerRef.current?.signal.aborted || isCancelled) {
+      if (queue.length === 0 || abortControllerRef.current?.signal.aborted || isCancelled) {
         return;
       }
 
-      // Claim next item atomically-ish (JS single thread makes 'poolIndex++' safe)
-      const currentIndex = poolIndex++;
-      const entry = pendingFiles[currentIndex];
+      // Claim next item safely
+      const entry = queue.shift();
+      if (!entry) return;
 
       // Update UI (mark as analyzing)
-      // Since we run in parallel, we don't want to re-render the whole list 5 times at once.
-      // But for feedback it is needed. We trust React tobatch updates slightly.
-      setCurrentIndex(files.findIndex(f => f.id === entry.id)); // Just for progress awareness, imperfect in parallel
+      setCurrentIndex(files.findIndex(f => f.id === entry.id)); 
       
       setFiles(prev => prev.map(f => 
-        f.id === entry.id ? { ...f, status: 'analyzing' } : f
+        f.id === entry.id ? { ...f, status: 'analyzing', error: undefined } : f
       ));
 
       // Analyze
@@ -455,15 +461,46 @@ export default function BulkImport() {
           (analyzedEntry.error?.toLowerCase().includes('api') || 
            analyzedEntry.error?.toLowerCase().includes('key') ||
            analyzedEntry.error?.toLowerCase().includes('unauthorized') ||
-           analyzedEntry.error?.toLowerCase().includes('401'))) {
+           analyzedEntry.error?.toLowerCase().includes('401')) &&
+          !analyzedEntry.error?.toLowerCase().includes('rate')) {
         
         setApiKeyMissing(true);
         abortControllerRef.current?.abort(); // Stop all other workers
         
         setFiles(prev => prev.map(f => 
-          f.id === entry.id ? { ...f, status: 'pending', error: 'Auth Error - Stopped' } : f
+          f.id === entry.id ? { ...f, status: 'pending', error: `Auth Error - Stopped: ${analyzedEntry.error}` } : f
         ));
         return;
+      }
+
+      // Handle Rate Limit (429) & Quota Issues Gracefully
+      if (analyzedEntry.status === 'error' && 
+          (analyzedEntry.error?.toLowerCase().includes('429') || 
+           analyzedEntry.error?.toLowerCase().includes('rate limit') ||
+           analyzedEntry.error?.toLowerCase().includes('too many') ||
+           analyzedEntry.error?.toLowerCase().includes('quota') ||
+           analyzedEntry.error?.toLowerCase().includes('exhausted'))) {
+        
+        console.warn(`Rate limit hit on file ${entry.name}, pausing entire queue for 60s...`);
+        
+        // Block other workers from proceeding for 60 seconds
+        rateLimitPauseUntil = Date.now() + 60000;
+
+        // Show wait status in UI
+        setFiles(prev => prev.map(f => 
+          f.id === entry.id ? { ...f, status: 'pending', error: 'API Limit erreicht. Warte 60s...' } : f
+        ));
+
+        // Put the item back at the start of the queue
+        queue.unshift(entry);
+        
+        // Pause this worker for 60 seconds
+        await new Promise(r => setTimeout(r, 60000));
+        
+        // Check abort again after sleeping
+        if (abortControllerRef.current?.signal.aborted || isCancelled) return;
+        
+        return await processNext();
       }
 
       // Duplicate Check (Synchronous Block)

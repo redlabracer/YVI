@@ -714,9 +714,7 @@ WICHTIG:
                     onChange={(e) => setGoogleModel(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-gray-900 dark:text-white"
                   >
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Empfohlen: Schnell & Smart)</option>
-                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Sehr stabil, hohe Qualität)</option>
-                    <option value="gemini-1.0-pro">Gemini 1.0 Pro (Ältere Version)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (Neu: Schnell & Top Limits)</option>
                     <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Neu)</option>
                   </select>
                 </div>

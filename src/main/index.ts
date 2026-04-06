@@ -1953,9 +1953,9 @@ function createWindow(): void {
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: true,
+      sandbox: false,
       webSecurity: true,
-      webviewTag: false,
+      webviewTag: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -1963,6 +1963,9 @@ function createWindow(): void {
 
   // Secure Content Security Policy
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    if (details.url.startsWith('https://tm1.carparts-cat.com') || details.url.startsWith('https://app.lexware.de')) {
+      return callback({ responseHeaders: details.responseHeaders })
+    }
     callback({
       responseHeaders: {
         ...details.responseHeaders,

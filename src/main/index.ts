@@ -176,148 +176,116 @@ ipcMain.on('open-carparts-cat', async (_, query) => {
         }
 
         function tryLogin() {
-          console.log('CarParts AutoLogin: tryLogin called');
-          
-          // Find ALL inputs on the page
-          const allInputs = Array.from(document.querySelectorAll('input'));
-          console.log('CarParts AutoLogin: Found', allInputs.length, 'inputs');
-          
-          // 1. Find Username field with broader matching
-          let userInput = allInputs.find(i => {
-            const attrs = (i.name + i.id + i.placeholder + i.className + (i.type || '')).toLowerCase();
-            return attrs.includes('user') || attrs.includes('email') || attrs.includes('login') || attrs.includes('benutzer');
-          });
-          
-          // Fallback: first text/email input that's not password
-          if (!userInput) {
-            userInput = allInputs.find(i => (i.type === 'text' || i.type === 'email' || !i.type) && i.type !== 'password' && i.type !== 'hidden');
-          }
+            const passInput = document.querySelector('input[type="password"]');
+            if (!passInput || passInput.offsetParent === null) return false;
 
-          // 2. Find Password field
-          const passInput = allInputs.find(i => i.type === 'password');
-          
-          console.log('CarParts AutoLogin: userInput found:', !!userInput, 'passInput found:', !!passInput);
-
-          if (username && userInput && userInput.value !== username) {
-            console.log('CarParts AutoLogin: Setting username');
-            setNativeValue(userInput, username);
-            triggerEvents(userInput);
-          }
-
-          if (password && passInput && passInput.value !== password) {
-            console.log('CarParts AutoLogin: Setting password');
-            setNativeValue(passInput, password);
-            triggerEvents(passInput);
-          }
-
-          // 3. Click Button - broader matching
-          if ((username && userInput) || (password && passInput)) {
-            const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], [type="submit"], .btn, .button'));
-            console.log('CarParts AutoLogin: Found', buttons.length, 'buttons');
-            
-            const actionBtn = buttons.find(b => {
-              const text = (b.innerText || b.textContent || b.value || '').toLowerCase();
-              const attrs = (b.className || '').toLowerCase();
-              return text.includes('weiter') || text.includes('login') || text.includes('anmelden') || 
-                     text.includes('einloggen') || text.includes('submit') ||
-                     attrs.includes('submit') || attrs.includes('login');
+            const allInputs = Array.from(document.querySelectorAll('input'));
+            let userInput = allInputs.find(i => {
+              if (i.offsetParent === null) return false;
+              const attrs = (i.name + i.id + i.placeholder + i.className + (i.type || '')).toLowerCase();
+              return (i.type === 'text' || i.type === 'email' || !i.type) && (attrs.includes('user') || attrs.includes('email') || attrs.includes('login') || attrs.includes('benutzer'));
             });
 
-            // Fallback: first visible button
-            const fallbackBtn = actionBtn || buttons.find(b => b.offsetParent !== null);
-
-            if (fallbackBtn) {
-              console.log('CarParts AutoLogin: Clicking button:', fallbackBtn.innerText || fallbackBtn.value);
-              setTimeout(() => fallbackBtn.click(), 500);
+            if (username && userInput && userInput.value !== username) {
+              setNativeValue(userInput, username);
+              triggerEvents(userInput);
             }
-          }
-        }
 
-        function trySearch() {
-          // Only run if we are NOT on a login page
-          const isLoginPage = document.querySelector('input[type="password"]') || 
-                              Array.from(document.querySelectorAll('input')).some(i => i.placeholder && i.placeholder.toLowerCase().includes('benutzer'));
-
-          if (!isLoginPage) {
-             const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
-             
-             // 1. Target the specific "Fahrzeug" search box (based on screenshot placeholder)
-             // Placeholder: "z.B. Golf 4 / KBA Nummer 0588 599"
-             let targetInput = inputs.find(i => {
-               const ph = (i.placeholder || '').toLowerCase();
-               return ph.includes('golf') || ph.includes('kba') || ph.includes('0588');
-             });
-
-             // 2. Fallback: Look for VIN/FIN specific inputs
-             if (!targetInput) {
-               targetInput = inputs.find(i => {
-                 const text = (i.name + i.id + i.placeholder).toLowerCase();
-                 return text.includes('vin') || text.includes('fin') || text.includes('chassis');
-               });
-             }
-
-             // 3. Fallback: General search
-             if (!targetInput) {
-                targetInput = inputs.find(i => {
-                 const text = (i.name + i.id + i.placeholder).toLowerCase();
-                 return text.includes('search') || text.includes('suche');
-               });
-             }
-
-             if (targetInput && query) {
-               // Focus and set value
-               targetInput.focus();
-               setNativeValue(targetInput, query);
-               triggerEvents(targetInput);
-               
-               // Try to submit via Enter key (often required for search bars)
-               const enterEvent = { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true };
-               targetInput.dispatchEvent(new KeyboardEvent('keydown', enterEvent));
-               targetInput.dispatchEvent(new KeyboardEvent('keypress', enterEvent));
-               targetInput.dispatchEvent(new KeyboardEvent('keyup', enterEvent));
-
-               // Also try to find and click the search button
-               // Look for a button sibling or inside the same wrapper
-               let searchBtn = targetInput.parentElement?.querySelector('button, [role="button"], .icon-search, i.fa-search');
-               
-               // If not found, look for global search buttons
-               if (!searchBtn) {
-                  searchBtn = document.querySelector('button[type="submit"], .search-button') ||
-                              Array.from(document.querySelectorAll('button')).find(b => b.innerText.toLowerCase().includes('suchen'));
-               }
-
-               if (searchBtn) {
-                 setTimeout(() => searchBtn.click(), 500);
-               }
-               return true;
-             }
-          }
-          return false;
-        }
-
-        // Run logic with retries
-        let attempts = 0;
-        const interval = setInterval(() => {
-          attempts++;
-          
-          // Check if we are on login page
-          const isLoginPage = document.querySelector('input[type="password"]') || 
-                              Array.from(document.querySelectorAll('input')).some(i => i.placeholder && i.placeholder.toLowerCase().includes('benutzer'));
-
-          if (isLoginPage) {
-            tryLogin();
-            // Don't clear interval immediately, as it might be a multi-step login
-            if (attempts > 20) clearInterval(interval); 
-          } else {
-            // If not login page, try search
-            if (trySearch()) {
-              clearInterval(interval);
-            } else if (attempts > 10) {
-              clearInterval(interval);
+            if (password && passInput && passInput.value !== password) {
+              setNativeValue(passInput, password);
+              triggerEvents(passInput);
             }
+
+            if ((username && userInput) || (password && passInput)) {
+              const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], [type="submit"], .btn, .button'));
+              const actionBtn = buttons.find(b => {
+                if (b.offsetParent === null) return false;
+                const text = (b.innerText || b.textContent || b.value || '').toLowerCase();
+                const attrs = (b.className || '').toLowerCase();
+                return text.includes('weiter') || text.includes('login') || text.includes('anmelden') || text.includes('einloggen') || text.includes('submit') || attrs.includes('submit') || attrs.includes('login');
+              });
+
+              const fallbackBtn = actionBtn || buttons.find(b => b.offsetParent !== null && (b.type === 'submit' || b.tagName.toLowerCase() === 'button'));
+
+              if (fallbackBtn) {
+                setTimeout(() => fallbackBtn.click(), 500);
+              }
+            }
+            return true;
           }
-        }, 800);
-      })();
+
+          function trySearch() {
+            const passInput = document.querySelector('input[type="password"]');
+            if (passInput && passInput.offsetParent !== null) return false;
+
+            const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
+            
+            let targetInput = inputs.find(i => {
+              if (i.offsetParent === null) return false;
+              const ph = (i.placeholder || '').toLowerCase();
+              return ph.includes('golf') || ph.includes('kba') || ph.includes('0588') || ph.includes('chassis') || ph.includes('fin') || ph.includes('vin');
+            });
+
+            if (!targetInput) {
+              targetInput = inputs.find(i => {
+                if (i.offsetParent === null) return false;
+                const text = (i.name + i.id + i.placeholder).toLowerCase();
+                return text.includes('vin') || text.includes('fin') || text.includes('chassis');
+              });
+            }
+
+            if (!targetInput) {
+              targetInput = inputs.find(i => {
+                if (i.offsetParent === null) return false;
+                const text = (i.name + i.id + i.placeholder).toLowerCase();
+                return text.includes('search') || text.includes('suche');
+              });
+            }
+
+            if (targetInput && query) {
+              if (targetInput.value === query) return true; // already filled
+              targetInput.focus();
+              setNativeValue(targetInput, query);
+              triggerEvents(targetInput);
+
+              const enterEvent = { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true };
+              targetInput.dispatchEvent(new KeyboardEvent('keydown', enterEvent));
+              targetInput.dispatchEvent(new KeyboardEvent('keypress', enterEvent));
+              targetInput.dispatchEvent(new KeyboardEvent('keyup', enterEvent));
+
+              let searchBtn = targetInput.parentElement?.querySelector('button, [role="button"], .icon-search, i.fa-search');
+              
+              if (!searchBtn) {
+                searchBtn = document.querySelector('button[type="submit"], .search-button, button[aria-label*="such"], button[aria-label*="search"]') || Array.from(document.querySelectorAll('button')).find(b => b.innerText.toLowerCase().includes('suchen') && b.offsetParent !== null);
+              }
+
+              if (searchBtn) {
+                setTimeout(() => searchBtn.click(), 500);
+              }
+              return true;
+            }
+            return false;
+          }
+
+          let attempts = 0;
+          let searchAttempts = 0;
+          const interval = setInterval(() => {
+            attempts++;
+            
+            const passInput = document.querySelector('input[type="password"]');
+            const isLoginPage = passInput && passInput.offsetParent !== null;
+
+            if (isLoginPage) {
+              tryLogin();
+              if (attempts > 20) clearInterval(interval);
+            } else {
+              searchAttempts++;
+              if (trySearch() || searchAttempts > 15) {
+                clearInterval(interval);
+              }
+            }
+          }, 800);
+        })();
     `
     win.webContents.executeJavaScript(script).catch((err) => {
       console.error('CarParts script error:', err);

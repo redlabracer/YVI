@@ -40,7 +40,7 @@ const Lexware = () => {
         (function() {
           const username = "${credentials.user}";
           const password = "${credentials.pass}";
-          
+
           function setNativeValue(element, value) {
             const lastValue = element.value;
             element.value = value;
@@ -59,28 +59,40 @@ const Lexware = () => {
             });
           }
 
-          // Try to find login fields
-          const emailInput = document.querySelector('input[type="email"]') || document.querySelector('input[name="email"]') || document.querySelector('input[name="username"]');
-          const passwordInput = document.querySelector('input[type="password"]');
-          const submitBtn = document.querySelector('button[type="submit"]');
+          let attempts = 0;
+          const interval = setInterval(() => {
+            attempts++;
+            if (attempts > 30) {
+              clearInterval(interval);
+              return;
+            }
 
-          if (emailInput && passwordInput) {
-             console.log('Found login fields, attempting auto-fill...');
-             
-             setNativeValue(emailInput, username);
-             triggerEvents(emailInput);
-             
-             setNativeValue(passwordInput, password);
-             triggerEvents(passwordInput);
+            // Try to find login fields
+            const emailInput = document.querySelector('input[type="email"]') || document.querySelector('input[name="email"]') || document.querySelector('input[name="username"]');
+            const passwordInput = document.querySelector('input[type="password"]');
+            const submitBtn = document.querySelector('button[type="submit"]');
 
-             // Auto submit
-             if (submitBtn) {
-                console.log('Clicking submit...');
-                setTimeout(() => {
-                   submitBtn.click();
-                }, 1000);
-             }
-          }
+            if (emailInput && passwordInput && emailInput.offsetParent !== null && passwordInput.offsetParent !== null) {
+               console.log('Found login fields, attempting auto-fill...');
+               clearInterval(interval); // Stop polling
+
+               setNativeValue(emailInput, username);
+               triggerEvents(emailInput);
+
+               setTimeout(() => {
+                 setNativeValue(passwordInput, password);
+                 triggerEvents(passwordInput);
+
+                 // Auto submit
+                 if (submitBtn) {
+                    console.log('Clicking submit...');
+                    setTimeout(() => {
+                       submitBtn.click();
+                    }, 500);
+                 }
+               }, 200);
+            }
+          }, 500);
         })();
       `
       try {

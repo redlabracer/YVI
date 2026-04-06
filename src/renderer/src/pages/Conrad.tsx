@@ -58,79 +58,55 @@ const Conrad = () => {
           }
 
           function tryLogin() {
-            console.log('Conrad AutoLogin: tryLogin called');
-            
-            // Find ALL inputs on the page
-            const allInputs = Array.from(document.querySelectorAll('input'));
-            console.log('Conrad AutoLogin: Found', allInputs.length, 'inputs');
-            
-            // 1. Find Username field with broader matching
-            let userInput = allInputs.find(i => {
-              const attrs = (i.name + i.id + i.placeholder + i.className + (i.type || '')).toLowerCase();
-              return attrs.includes('user') || attrs.includes('email') || attrs.includes('login') || attrs.includes('benutzer');
-            });
-            
-            // Fallback: first text/email input that's not password
-            if (!userInput) {
-              userInput = allInputs.find(i => (i.type === 'text' || i.type === 'email' || !i.type) && i.type !== 'password' && i.type !== 'hidden');
-            }
+            const passInput = document.querySelector('input[type="password"]');
+            if (!passInput || passInput.offsetParent === null) return false;
 
-            // 2. Find Password field
-            const passInput = allInputs.find(i => i.type === 'password');
-            
-            console.log('Conrad AutoLogin: userInput found:', !!userInput, 'passInput found:', !!passInput);
+            const allInputs = Array.from(document.querySelectorAll('input'));
+            let userInput = allInputs.find(i => {
+              if (i.offsetParent === null) return false;
+              const attrs = (i.name + i.id + i.placeholder + i.className + (i.type || '')).toLowerCase();
+              return (i.type === 'text' || i.type === 'email' || !i.type) && (attrs.includes('user') || attrs.includes('email') || attrs.includes('login') || attrs.includes('benutzer'));
+            });
 
             if (username && userInput && userInput.value !== username) {
-              console.log('Conrad AutoLogin: Setting username');
               setNativeValue(userInput, username);
               triggerEvents(userInput);
             }
 
             if (password && passInput && passInput.value !== password) {
-              console.log('Conrad AutoLogin: Setting password');
               setNativeValue(passInput, password);
               triggerEvents(passInput);
             }
 
-            // 3. Click Button - broader matching
             if ((username && userInput) || (password && passInput)) {
               const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], [type="submit"], .btn, .button'));
-              console.log('Conrad AutoLogin: Found', buttons.length, 'buttons');
-              
               const actionBtn = buttons.find(b => {
+                if (b.offsetParent === null) return false;
                 const text = (b.innerText || b.textContent || b.value || '').toLowerCase();
                 const attrs = (b.className || '').toLowerCase();
-                return text.includes('weiter') || text.includes('login') || text.includes('anmelden') || 
-                       text.includes('einloggen') || text.includes('submit') ||
-                       attrs.includes('submit') || attrs.includes('login');
+                return text.includes('weiter') || text.includes('login') || text.includes('anmelden') || text.includes('einloggen') || text.includes('submit') || attrs.includes('submit') || attrs.includes('login');
               });
 
-              // Fallback: first visible button
-              const fallbackBtn = actionBtn || buttons.find(b => b.offsetParent !== null);
+              const fallbackBtn = actionBtn || buttons.find(b => b.offsetParent !== null && (b.type === 'submit' || b.tagName.toLowerCase() === 'button'));
 
               if (fallbackBtn) {
-                console.log('Conrad AutoLogin: Clicking button:', fallbackBtn.innerText || fallbackBtn.value);
                 setTimeout(() => fallbackBtn.click(), 500);
               }
             }
+            return true;
           }
 
-          // Run logic with retries
           let attempts = 0;
           const interval = setInterval(() => {
             attempts++;
-            
-            // Check if we are on login page
-            const isLoginPage = document.querySelector('input[type="password"]') || 
-                                Array.from(document.querySelectorAll('input')).some(i => i.placeholder && i.placeholder.toLowerCase().includes('benutzer'));
+            const passInput = document.querySelector('input[type="password"]');
+            const isLoginPage = passInput && passInput.offsetParent !== null;
 
-            if (isLoginPage || attempts < 5) {
+            if (isLoginPage) {
               tryLogin();
-              // Don't clear interval immediately, as it might be a multi-step login
-              if (attempts > 20) clearInterval(interval); 
-            } else {
-               // Stop if not on login page (meaning we are logged in)
-               clearInterval(interval);
+              if (attempts > 20) clearInterval(interval);
+            } else if (attempts > 5) {
+              clearInterval(interval);
             }
           }, 1000);
         })();

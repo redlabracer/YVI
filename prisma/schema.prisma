@@ -71,8 +71,6 @@ model ServiceRecord {
   description String
   mileage     Int?     // KM-Stand bei Service
   cost        Float?
-  revenue     Float?   // Neuer Umsatz
-  materialCost Float?  // Neu Materialkosten
   lexwareId   String?  @unique
   customerId  Int
   customer    Customer @relation(fields: [customerId], references: [id])
@@ -128,7 +126,6 @@ model Appointment {
   title       String
   start       DateTime
   end         DateTime
-  completedAt DateTime? // Neuer Zeitstempel für Abschluss
   description String?
   status      String   @default("open") // open, in-progress, done, picked-up
   customerId  Int?

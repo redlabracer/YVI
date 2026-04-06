@@ -29,6 +29,8 @@ export default function TodoList() {
     try {
         const res: any = await api.customers.getAll()
         setCustomers(res.data || res)
+    } catch (err) {
+        console.error(err)
     }
   }
 

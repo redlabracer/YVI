@@ -149,6 +149,8 @@ export default function TireStorage() {
         ])
 
         const customerList: any = (customerListRes as any).data || customerListRes
+        setCustomers(customerList)
+
       // Merge initial data with DB spots
       const mergedRacks = { ...initialRackData }
       spotList.forEach((spot: any) => {

@@ -138,6 +138,8 @@ export default function Calendar() {
     try {
         const res: any = await api.customers.getAll()
         setCustomers(res.data || res)
+    } catch (err) {
+        console.error(err)
     }
   }
 

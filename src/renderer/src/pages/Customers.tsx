@@ -53,10 +53,15 @@ export default function Customers() {
     try {
         setIsLoading(true)
         console.log('[Customers] Loading customers...')
-        const data = await api.customers.getAll({ page: currentPage, limit: 20, search })
-        console.log('[Customers] Loaded:', data)
-        setCustomers(prev => currentPage === 1 ? data : [...prev, ...data])
-        setHasMore((data as any[]).length === 20)
+        const response: any = await api.customers.getAll({ page: currentPage, limit: 20, search })
+        const fetchedData = response.data || response;
+        console.log('[Customers] Loaded:', fetchedData)
+        setCustomers(prev => currentPage === 1 ? fetchedData : [...prev, ...fetchedData])
+        if (response.meta) {
+            setHasMore(currentPage < response.meta.totalPages)
+        } else {
+            setHasMore((fetchedData as any[]).length === 20)
+        }
     } catch (err) {
         console.error('[Customers] Error:', err)
     } finally {
@@ -64,7 +69,7 @@ export default function Customers() {
     }
   }
 
-  const filteredCustomers = customers
+  const filteredCustomers = customers || []
 
   return (
     <div className="space-y-4 sm:space-y-6">

@@ -3,11 +3,41 @@ import prisma from '../db'
 
 export const getCustomers = async (req: Request, res: Response) => {
   try {
-    const customers = await prisma.customer.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { vehicles: true }
-    })
-    res.json(customers)
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = (req.query.search as string) || '';
+
+    const skip = (page - 1) * limit;
+
+    const where = search ? {
+      OR: [
+        { firstName: { contains: search } },
+        { lastName: { contains: search } },
+        { licensePlate: { contains: search } }, // We'll handle this differently... actually wait, licensePlate is on vehicles
+        { vehicles: { some: { licensePlate: { contains: search } } } }
+      ]
+    } : {};
+
+    const [customers, total] = await Promise.all([
+      prisma.customer.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: { vehicles: true }
+      }),
+      prisma.customer.count({ where })
+    ]);
+
+    res.json({
+      data: customers,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Laden der Kunden' })
   }

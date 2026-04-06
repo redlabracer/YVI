@@ -1,33 +1,70 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, User, Phone, MapPin, Car, ChevronRight, Upload } from 'lucide-react'
+import { Search, Plus, User, Phone, MapPin, Car, ChevronRight, Upload, Loader2 } from 'lucide-react'
 import { api } from '../api'
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
 
 export default function Customers() {
   const [customers, setCustomers] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    loadCustomers()
-  }, [])
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
 
-  const loadCustomers = async () => {
+  const observer = useRef<IntersectionObserver | null>(null)
+  const lastCustomerElementRef = useCallback((node: any) => {
+    if (isLoading) return
+    if (observer.current) observer.current.disconnect()
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        setPage(prevPage => prevPage + 1)
+      }
+    })
+    if (node) observer.current.observe(node)
+  }, [isLoading, hasMore])
+
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearchTerm])
+
+  useEffect(() => {
+    loadCustomers(page, debouncedSearchTerm)
+  }, [page, debouncedSearchTerm])
+
+  const loadCustomers = async (currentPage: number, search: string) => {
     try {
+        setIsLoading(true)
         console.log('[Customers] Loading customers...')
-        const data = await api.customers.getAll() // Use unified API
+        const data = await api.customers.getAll({ page: currentPage, limit: 20, search })
         console.log('[Customers] Loaded:', data)
-        setCustomers(data)
+        setCustomers(prev => currentPage === 1 ? data : [...prev, ...data])
+        setHasMore((data as any[]).length === 20)
     } catch (err) {
         console.error('[Customers] Error:', err)
+    } finally {
+        setIsLoading(false)
     }
   }
 
-  const filteredCustomers = customers.filter(c => 
-    c.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.phone && c.phone.includes(searchTerm))
-  )
+  const filteredCustomers = customers
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -71,9 +108,10 @@ export default function Customers() {
 
         {/* Mobile Card View */}
         <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700">
-          {filteredCustomers.map((customer) => (
+          {filteredCustomers.map((customer, index) => (
             <div 
               key={customer.id} 
+              ref={index === filteredCustomers.length - 1 ? lastCustomerElementRef : null}
               onClick={() => navigate(`/customer/${customer.id}`)}
               className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer active:bg-gray-100 dark:active:bg-gray-700"
             >
@@ -129,9 +167,10 @@ export default function Customers() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {filteredCustomers.map((customer) => (
+              {filteredCustomers.map((customer, index) => (
                 <tr 
                   key={customer.id} 
+                  ref={index === filteredCustomers.length - 1 ? lastCustomerElementRef : null}
                   onClick={() => navigate(`/customer/${customer.id}`)}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group"
                 >
@@ -201,6 +240,13 @@ export default function Customers() {
             </tbody>
           </table>
         </div>
+        
+        {isLoading && (
+          <div className="py-6 flex justify-center items-center gap-2 text-gray-500">
+            <Loader2 className="animate-spin" size={24} />
+            <span>Lade Kunden...</span>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -498,12 +498,43 @@ ipcMain.handle('create-customer', async (_, data) => {
   return customer
 })
 
-ipcMain.handle('get-customers', async () => {
-  return await prisma.customer.findMany({
-    include: {
-      vehicles: true
+ipcMain.handle('get-customers', async (_, options: any = {}) => {
+  const page = options.page || 1;
+  const limit = options.limit || 50;
+  const search = options.search || '';
+
+  const skip = (page - 1) * limit;
+
+  const where = search ? {
+    OR: [
+      { firstName: { contains: search } },
+      { lastName: { contains: search } },
+      { vehicles: { some: { licensePlate: { contains: search } } } }
+    ]
+  } : {};
+
+  const [customers, total] = await Promise.all([
+    prisma.customer.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      include: {
+        vehicles: true
+      }
+    }),
+    prisma.customer.count({ where })
+  ]);
+  
+  return {
+    data: customers,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
     }
-  })
+  };
 })
 
 ipcMain.handle('get-customer', async (_, id) => {

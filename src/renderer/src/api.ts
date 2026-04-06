@@ -81,12 +81,13 @@ export const setServerUrl = (url: string) => {
 export const api = {
   // --- KUNDEN (Customers) ---
   customers: {
-    getAll: async () => {
+    getAll: async (params?: { page?: number, limit?: number, search?: string }) => {
+      const qParams = params ? `?page=${params.page || 1}&limit=${params.limit || 50}&search=${encodeURIComponent(params.search || '')}` : '';
       if (isElectron) {
         // @ts-ignore
-        return await window.electron.ipcRenderer.invoke('get-customers');
+        return await window.electron.ipcRenderer.invoke('get-customers', params);
       } else {
-        return await request('customers');
+        return await request(`customers${qParams}`);
       }
     },
 

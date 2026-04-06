@@ -619,7 +619,7 @@ WICHTIG:
                     <input 
                       type="range" 
                       min="1" 
-                      max="10" 
+                      max="50" 
                       step="1"
                       value={bulkAnalysisConcurrency}
                       onChange={(e) => setBulkAnalysisConcurrency(Number(e.target.value))}

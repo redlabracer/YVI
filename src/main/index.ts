@@ -1556,6 +1556,35 @@ ipcMain.handle('save-settings', async (_, data) => {
 })
 
 
+// Lexoffice erlaubt nur ~2 Anfragen pro Sekunde. Dieser Helper wiederholt
+// Anfragen bei 429 (Too Many Requests) automatisch mit exponentiellem Backoff
+// und respektiert den "Retry-After"-Header, falls vorhanden.
+const lexwareFetch = async (
+  url: string,
+  options: Parameters<typeof fetch>[1],
+  maxRetries = 5
+): Promise<Response> => {
+  let attempt = 0
+
+  while (true) {
+    const response = await fetch(url, options)
+
+    if (response.status !== 429 || attempt >= maxRetries) {
+      return response
+    }
+
+    const retryAfterHeader = response.headers.get('Retry-After')
+    const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : 0
+    const backoffMs = Math.max(retryAfterMs, 1000 * Math.pow(2, attempt))
+    attempt++
+
+    console.warn(
+      `Lexware Rate-Limit (429) erreicht. Warte ${backoffMs}ms vor erneutem Versuch (${attempt}/${maxRetries})...`
+    )
+    await new Promise((resolve) => setTimeout(resolve, backoffMs))
+  }
+}
+
 ipcMain.handle('sync-lexware', async () => {
   console.log('IPC: sync-lexware called')
   const settings = await prisma.settings.findFirst()
@@ -1572,7 +1601,7 @@ ipcMain.handle('sync-lexware', async () => {
     
     while (hasMoreContacts) {
         console.log(`Lade Kontakte Seite ${page}...`)
-        const response = await fetch(`https://api.lexoffice.io/v1/contacts?page=${page}&size=100`, {
+        const response = await lexwareFetch(`https://api.lexoffice.io/v1/contacts?page=${page}&size=100`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${settings.apiKey}`,
@@ -1592,6 +1621,8 @@ ipcMain.handle('sync-lexware', async () => {
             hasMoreContacts = false
         } else {
             page++
+            // Rate Limiting: kurze Pause zwischen den Seiten (max. 2 Req/Sek.)
+            await new Promise(resolve => setTimeout(resolve, 600))
         }
         
         // Safety break
@@ -1665,7 +1696,7 @@ ipcMain.handle('sync-lexware', async () => {
     
     while (hasMoreInvoices) {
         console.log(`Lade Rechnungsliste Seite ${invoicePage}...`)
-        const invoiceResponse = await fetch(`https://api.lexoffice.io/v1/voucherlist?voucherType=invoice&voucherStatus=open,paid,voided&page=${invoicePage}&size=100`, {
+        const invoiceResponse = await lexwareFetch(`https://api.lexoffice.io/v1/voucherlist?voucherType=invoice&voucherStatus=open,paid,voided&page=${invoicePage}&size=100`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${settings.apiKey}`,
@@ -1686,6 +1717,8 @@ ipcMain.handle('sync-lexware', async () => {
             hasMoreInvoices = false
         } else {
             invoicePage++
+            // Rate Limiting: kurze Pause zwischen den Seiten (max. 2 Req/Sek.)
+            await new Promise(resolve => setTimeout(resolve, 600))
         }
         
         if (invoicePage > 100) hasMoreInvoices = false
@@ -1702,7 +1735,7 @@ ipcMain.handle('sync-lexware', async () => {
             await new Promise(resolve => setTimeout(resolve, 500))
 
             // Fetch full invoice details to get contactId and correct amounts
-            const detailResponse = await fetch(`https://api.lexoffice.io/v1/invoices/${voucher.id}`, {
+            const detailResponse = await lexwareFetch(`https://api.lexoffice.io/v1/invoices/${voucher.id}`, {
                  method: 'GET',
                  headers: {
                     'Authorization': `Bearer ${settings.apiKey}`,
@@ -1773,7 +1806,7 @@ ipcMain.handle('sync-lexware', async () => {
                     await new Promise(resolve => setTimeout(resolve, 200))
                     // Fetch PDF content
                     // Endpoint: /v1/invoices/{id}/document
-                    const pdfResponse = await fetch(`https://api.lexoffice.io/v1/invoices/${invoice.id}/document`, {
+                    const pdfResponse = await lexwareFetch(`https://api.lexoffice.io/v1/invoices/${invoice.id}/document`, {
                         method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${settings.apiKey}`,
@@ -1786,7 +1819,7 @@ ipcMain.handle('sync-lexware', async () => {
                         
                         if (pdfData.documentFileId) {
                              await new Promise(resolve => setTimeout(resolve, 200))
-                             const fileResponse = await fetch(`https://api.lexoffice.io/v1/files/${pdfData.documentFileId}`, {
+                             const fileResponse = await lexwareFetch(`https://api.lexoffice.io/v1/files/${pdfData.documentFileId}`, {
                                 method: 'GET',
                                 headers: {
                                     'Authorization': `Bearer ${settings.apiKey}`,
@@ -1905,7 +1938,7 @@ ipcMain.handle('sync-lexware', async () => {
         }
         
         // Create contact in Lexware
-        const createResponse = await fetch('https://api.lexoffice.io/v1/contacts', {
+        const createResponse = await lexwareFetch('https://api.lexoffice.io/v1/contacts', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${settings.apiKey}`,
@@ -2040,6 +2073,15 @@ function createWindow(): void {
     // Keep the popup's own popups (nested print dialogs) working too.
     webContents.on('did-create-window', (childWindow) => {
       childWindow.webContents.setWindowOpenHandler(() => ({ action: 'allow' }))
+    })
+
+    // The Lexware Beleg/voucher editor registers a `beforeunload` handler, which
+    // makes Electron show a blocking "Seite verlassen? / Leave site?" dialog every
+    // time we navigate the webview (e.g. via the back/forward/reload buttons or
+    // when routing a new Beleg into the same webview). Auto-confirm the unload so
+    // navigation isn't blocked by that dialog.
+    webContents.on('will-prevent-unload', (event) => {
+      event.preventDefault()
     })
   })
 

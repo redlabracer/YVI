@@ -65,6 +65,40 @@ export const saveSettings = async (req: Request, res: Response) => {
   }
 }
 
+// Lexoffice erlaubt nur ~2 Anfragen pro Sekunde. Dieser Helper wiederholt
+// Anfragen bei 429 (Too Many Requests) automatisch mit exponentiellem Backoff
+// und respektiert den "Retry-After"-Header, falls vorhanden.
+const lexwareFetch = async (
+  url: string,
+  options: RequestInit,
+  maxRetries = 5
+): Promise<Response> => {
+  let attempt = 0
+
+  while (true) {
+    const response = await fetch(url, options)
+
+    if (response.status !== 429 || attempt >= maxRetries) {
+      return response
+    }
+
+    // Retry-After kann in Sekunden angegeben sein
+    const retryAfterHeader = response.headers.get('Retry-After')
+    const retryAfterMs = retryAfterHeader
+      ? Number(retryAfterHeader) * 1000
+      : 0
+
+    // Exponentielles Backoff: 1s, 2s, 4s, 8s, 16s (Minimum aus Retry-After)
+    const backoffMs = Math.max(retryAfterMs, 1000 * Math.pow(2, attempt))
+    attempt++
+
+    console.warn(
+      `Lexware Rate-Limit (429) erreicht. Warte ${backoffMs}ms vor erneutem Versuch (${attempt}/${maxRetries})...`
+    )
+    await new Promise((resolve) => setTimeout(resolve, backoffMs))
+  }
+}
+
 // Lexware Sync - Bidirectional sync between local DB and Lexware
 export const syncLexware = async (req: Request, res: Response) => {
   console.log('[Server] sync-lexware called')
@@ -82,7 +116,7 @@ export const syncLexware = async (req: Request, res: Response) => {
     
     while (hasMoreContacts) {
       console.log(`Lade Kontakte Seite ${page}...`)
-      const response = await fetch(`https://api.lexoffice.io/v1/contacts?page=${page}&size=100`, {
+      const response = await lexwareFetch(`https://api.lexoffice.io/v1/contacts?page=${page}&size=100`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${settings.apiKey}`,
@@ -102,6 +136,8 @@ export const syncLexware = async (req: Request, res: Response) => {
         hasMoreContacts = false
       } else {
         page++
+        // Rate Limiting: kurze Pause zwischen den Seiten (max. 2 Req/Sek.)
+        await new Promise(resolve => setTimeout(resolve, 600))
       }
       
       // Safety break
@@ -225,7 +261,7 @@ export const syncLexware = async (req: Request, res: Response) => {
           }
         }
         
-        const createResponse = await fetch('https://api.lexoffice.io/v1/contacts', {
+        const createResponse = await lexwareFetch('https://api.lexoffice.io/v1/contacts', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${settings.apiKey}`,
@@ -274,7 +310,7 @@ export const syncLexware = async (req: Request, res: Response) => {
     
     while (hasMoreInvoices) {
         console.log(`Lade Rechnungsliste Seite ${invoicePage}...`)
-        const invoiceResponse = await fetch(`https://api.lexoffice.io/v1/voucherlist?voucherType=invoice&voucherStatus=open,paid,voided&page=${invoicePage}&size=100`, {
+        const invoiceResponse = await lexwareFetch(`https://api.lexoffice.io/v1/voucherlist?voucherType=invoice&voucherStatus=open,paid,voided&page=${invoicePage}&size=100`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${settings.apiKey}`,
@@ -295,6 +331,8 @@ export const syncLexware = async (req: Request, res: Response) => {
             hasMoreInvoices = false
         } else {
             invoicePage++
+            // Rate Limiting: kurze Pause zwischen den Seiten (max. 2 Req/Sek.)
+            await new Promise(resolve => setTimeout(resolve, 600))
         }
         
         if (invoicePage > 100) hasMoreInvoices = false
@@ -311,7 +349,7 @@ export const syncLexware = async (req: Request, res: Response) => {
         await new Promise(resolve => setTimeout(resolve, 500))
 
         // Fetch full invoice details to get contactId and correct amounts
-        const detailResponse = await fetch(`https://api.lexoffice.io/v1/invoices/${voucher.id}`, {
+        const detailResponse = await lexwareFetch(`https://api.lexoffice.io/v1/invoices/${voucher.id}`, {
              method: 'GET',
              headers: {
                 'Authorization': `Bearer ${settings.apiKey}`,
@@ -377,7 +415,7 @@ export const syncLexware = async (req: Request, res: Response) => {
                 console.log(`Lade PDF für Rechnung ${invoice.voucherNumber}...`)
                 await new Promise(resolve => setTimeout(resolve, 200))
                 
-                const pdfResponse = await fetch(`https://api.lexoffice.io/v1/invoices/${invoice.id}/document`, {
+                const pdfResponse = await lexwareFetch(`https://api.lexoffice.io/v1/invoices/${invoice.id}/document`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${settings.apiKey}`,
@@ -390,7 +428,7 @@ export const syncLexware = async (req: Request, res: Response) => {
                     
                     if (pdfData.documentFileId) {
                          await new Promise(resolve => setTimeout(resolve, 200))
-                         const fileResponse = await fetch(`https://api.lexoffice.io/v1/files/${pdfData.documentFileId}`, {
+                         const fileResponse = await lexwareFetch(`https://api.lexoffice.io/v1/files/${pdfData.documentFileId}`, {
                             method: 'GET',
                             headers: {
                                 'Authorization': `Bearer ${settings.apiKey}`,

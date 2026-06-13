@@ -118,27 +118,37 @@ ipcMain.on('open-external', (_, url) => {
   }
 })
 
-ipcMain.on('open-carparts-cat', async (_, query) => {
+ipcMain.on('open-carparts-cat', async (_, payload) => {
+  // Backwards compatible: payload may be a plain VIN string (legacy) or an
+  // object { query, username, password } where the renderer already resolved
+  // the credentials (e.g. from the remote settings server).
+  const query = typeof payload === 'string' ? payload : payload?.query || ''
+  let username = typeof payload === 'object' ? payload?.username || '' : ''
+  let password = typeof payload === 'object' ? payload?.password || '' : ''
+
   console.log('IPC: open-carparts-cat called with query:', query)
-  
-  let username = ''
-  let password = ''
-  
-  try {
-    const settings = await prisma.settings.findFirst()
-    username = settings?.carPartsUser || ''
-    password = settings?.carPartsPass || ''
-    console.log('CarParts credentials loaded:', username ? 'username set' : 'no username')
-  } catch (err) {
-    console.error('Error loading settings for CarParts:', err)
+
+  // Fall back to the local settings DB only if the renderer didn't supply them.
+  if (!username && !password) {
+    try {
+      const settings = await prisma.settings.findFirst()
+      username = settings?.carPartsUser || ''
+      password = settings?.carPartsPass || ''
+    } catch (err) {
+      console.error('Error loading settings for CarParts:', err)
+    }
   }
+  console.log('CarParts credentials loaded:', username ? 'username set' : 'no username')
 
   const win = new BrowserWindow({
     width: 1280,
     height: 900,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      // Shared persistent session so the login carries over between searches and
+      // between this window and the embedded Conrad <webview> (same partition).
+      partition: 'persist:carparts'
     }
   })
 
@@ -155,17 +165,30 @@ ipcMain.on('open-carparts-cat', async (_, query) => {
         
         console.log('CarParts AutoLogin: Starting with username:', username ? 'SET' : 'EMPTY');
         
-        // Helper to force value update for React/Angular/Vue
+        // Helper to force value update for React/Angular/Vue.
+        // Uses the native prototype setter so controlled inputs register the value.
         function setNativeValue(element, value) {
-          const lastValue = element.value;
-          element.value = value;
-          const event = new Event('input', { bubbles: true });
-          // Hack for React 15/16
+          try {
+            const proto = Object.getPrototypeOf(element);
+            const ownSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            const protoSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (ownSetter && protoSetter && ownSetter !== protoSetter) {
+              protoSetter.call(element, value);
+            } else if (ownSetter) {
+              ownSetter.call(element, value);
+            } else {
+              element.value = value;
+            }
+          } catch (e) {
+            element.value = value;
+          }
+          // Legacy React 15/16 value tracker hack as a fallback.
           const tracker = element._valueTracker;
           if (tracker) {
-            tracker.setValue(lastValue);
+            tracker.setValue('');
           }
-          element.dispatchEvent(event);
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         function triggerEvents(element) {
@@ -476,26 +499,41 @@ ipcMain.handle('get-customers', async (_, options: any = {}) => {
   let where: any = {};
   if (search) {
     const searchTerms = search.split(/\s+/).filter((term: string) => term.length > 0);
-    where.AND = searchTerms.map((term: string) => ({
-      OR: [
-        { firstName: { contains: term } },
-        { lastName: { contains: term } },
-        { phone: { contains: term } },
-        { email: { contains: term } },
-        { address: { contains: term } },
-        { vehicles: { 
-            some: { 
-              OR: [
-                { licensePlate: { contains: term } },
-                { make: { contains: term } },
-                { model: { contains: term } },
-                { vin: { contains: term } }
-              ]
-            } 
-          } 
+    // Resolve vehicle matches via a separate query instead of a nested
+    // `vehicles.some` relation filter (which can fail on SQLite together with
+    // skip/take/orderBy). Same semantics: each term matches a customer field
+    // OR one of the customer's vehicles.
+    const perTermConditions = await Promise.all(
+      searchTerms.map(async (term: string) => {
+        const matchingVehicles = await prisma.vehicle.findMany({
+          where: {
+            OR: [
+              { licensePlate: { contains: term } },
+              { make: { contains: term } },
+              { model: { contains: term } },
+              { vin: { contains: term } }
+            ]
+          },
+          select: { customerId: true }
+        });
+        const vehicleCustomerIds = Array.from(
+          new Set(matchingVehicles.map((v) => v.customerId))
+        );
+
+        const or: any[] = [
+          { firstName: { contains: term } },
+          { lastName: { contains: term } },
+          { phone: { contains: term } },
+          { email: { contains: term } },
+          { address: { contains: term } }
+        ];
+        if (vehicleCustomerIds.length > 0) {
+          or.push({ id: { in: vehicleCustomerIds } });
         }
-      ]
-    }));
+        return { OR: or };
+      })
+    );
+    where.AND = perTermConditions;
   }
 
   const [customers, total] = await Promise.all([
@@ -1951,6 +1989,60 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Popups opened from inside embedded <webview> elements (e.g. Lexware "Drucke &
+  // Speichern" / print preview, document downloads) must open as real child windows
+  // instead of being denied or pushed to the external browser. The main window's
+  // window-open handler above only governs the app shell, not the webviews, so we
+  // configure each attached webview's webContents separately here.
+  mainWindow.webContents.on('did-attach-webview', (_event, webContents) => {
+    webContents.setWindowOpenHandler((details) => {
+      const url = details.url || ''
+      const lower = url.toLowerCase()
+
+      // Print / PDF / document popups must open as real child windows so they
+      // can render and trigger the print dialog (e.g. Lexware "Drucke & Speichern").
+      const isDocumentPopup =
+        lower.startsWith('blob:') ||
+        lower.startsWith('data:') ||
+        lower.includes('.pdf') ||
+        lower.includes('/pdf') ||
+        lower.includes('print') ||
+        lower.includes('download') ||
+        lower.includes('render')
+
+      if (isDocumentPopup) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 1024,
+            height: 768,
+            autoHideMenuBar: true,
+            webPreferences: {
+              nodeIntegration: false,
+              contextIsolation: true
+            }
+          }
+        }
+      }
+
+      // Otherwise this is an in-app navigation (e.g. the Lexware Beleg/voucher
+      // editor opened via window.open). Opening it as a separate window left the
+      // user stuck — the toolbar buttons live in the main window. Instead load it
+      // inside the same <webview> so the back/forward/reload buttons keep working.
+      try {
+        webContents.loadURL(url)
+      } catch (err) {
+        console.error('Failed to load popup URL in webview:', err)
+      }
+      return { action: 'deny' }
+    })
+
+    // Keep the popup's own popups (nested print dialogs) working too.
+    webContents.on('did-create-window', (childWindow) => {
+      childWindow.webContents.setWindowOpenHandler(() => ({ action: 'allow' }))
+    })
+  })
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -1964,6 +2056,24 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // Ensure only a single instance runs. Multiple instances compete for the
+  // userData session cache ("Unable to move the cache: Access is denied"),
+  // which prevents the persistent login partitions (Conrad/Lexware) from
+  // saving their cookies, so auto-logins never stay logged in.
+  const gotLock = app.requestSingleInstanceLock()
+  if (!gotLock) {
+    logger.info('Another instance is already running. Quitting this instance.')
+    app.quit()
+    return
+  }
+  app.on('second-instance', () => {
+    const existing = BrowserWindow.getAllWindows()[0]
+    if (existing) {
+      if (existing.isMinimized()) existing.restore()
+      existing.focus()
+    }
+  })
+
   logger.init()
   setupLoggerIPC()
   logger.info('Application starting...')

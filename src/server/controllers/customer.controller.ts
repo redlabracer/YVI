@@ -12,26 +12,42 @@ export const getCustomers = async (req: Request, res: Response) => {
     let where: any = {};
     if (search) {
       const searchTerms = search.split(/\s+/).filter(term => term.length > 0);
-      where.AND = searchTerms.map(term => ({
-        OR: [
-          { firstName: { contains: term } },
-          { lastName: { contains: term } },
-          { phone: { contains: term } },
-          { email: { contains: term } },
-          { address: { contains: term } },
-          { vehicles: { 
-              some: { 
-                OR: [
-                  { licensePlate: { contains: term } },
-                  { make: { contains: term } },
-                  { model: { contains: term } },
-                  { vin: { contains: term } }
-                ]
-              } 
-            } 
+      // For each term, resolve matching vehicles to customer IDs via a separate
+      // query instead of a nested `vehicles.some` relation filter. Nested relation
+      // filters combined with skip/take/orderBy can fail on SQLite, which caused
+      // the 500 errors. This preserves the same semantics (each term must match a
+      // customer field OR one of the customer's vehicles).
+      const perTermConditions = await Promise.all(
+        searchTerms.map(async term => {
+          const matchingVehicles = await prisma.vehicle.findMany({
+            where: {
+              OR: [
+                { licensePlate: { contains: term } },
+                { make: { contains: term } },
+                { model: { contains: term } },
+                { vin: { contains: term } }
+              ]
+            },
+            select: { customerId: true }
+          });
+          const vehicleCustomerIds = Array.from(
+            new Set(matchingVehicles.map(v => v.customerId))
+          );
+
+          const or: any[] = [
+            { firstName: { contains: term } },
+            { lastName: { contains: term } },
+            { phone: { contains: term } },
+            { email: { contains: term } },
+            { address: { contains: term } }
+          ];
+          if (vehicleCustomerIds.length > 0) {
+            or.push({ id: { in: vehicleCustomerIds } });
           }
-        ]
-      }));
+          return { OR: or };
+        })
+      );
+      where.AND = perTermConditions;
     }
 
     const [customers, total] = await Promise.all([
@@ -55,7 +71,11 @@ export const getCustomers = async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Fehler beim Laden der Kunden' })
+    console.error('[getCustomers] Error loading customers:', error)
+    res.status(500).json({
+      error: 'Fehler beim Laden der Kunden',
+      details: error instanceof Error ? error.message : String(error)
+    })
   }
 }
 

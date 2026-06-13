@@ -42,12 +42,21 @@ export default function Customers() {
   }, [isLoading, hasMore])
 
   useEffect(() => {
+    // When the search term changes, reset list + pagination and load the first page.
+    // Loading page 1 directly here (instead of relying on the page effect) avoids a
+    // race where the previous (high) page value triggers a request with a stale page,
+    // e.g. GET /api/customers?page=54&search=hans which caused 500 errors.
+    setCustomers([])
+    setHasMore(true)
     setPage(1)
+    loadCustomers(1, debouncedSearchTerm)
   }, [debouncedSearchTerm])
 
   useEffect(() => {
-    loadCustomers(page, debouncedSearchTerm)
-  }, [page, debouncedSearchTerm])
+    if (page > 1) {
+      loadCustomers(page, debouncedSearchTerm)
+    }
+  }, [page])
 
   const loadCustomers = async (currentPage: number, search: string) => {
     try {
@@ -64,6 +73,7 @@ export default function Customers() {
         }
     } catch (err) {
         console.error('[Customers] Error:', err)
+        setHasMore(false)
     } finally {
         setIsLoading(false)
     }

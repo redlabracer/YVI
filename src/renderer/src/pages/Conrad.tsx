@@ -37,17 +37,29 @@ const Conrad = () => {
           
           console.log('Conrad AutoLogin: Starting with username:', username ? 'SET' : 'EMPTY');
           
-          // Helper to force value update for React/Angular/Vue
+          // Helper to force value update for React/Angular/Vue.
+          // Uses the native prototype setter so controlled inputs register the value.
           function setNativeValue(element, value) {
-            const lastValue = element.value;
-            element.value = value;
-            const event = new Event('input', { bubbles: true });
-            // Hack for React 15/16
+            try {
+              const proto = Object.getPrototypeOf(element);
+              const ownSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+              const protoSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+              if (ownSetter && protoSetter && ownSetter !== protoSetter) {
+                protoSetter.call(element, value);
+              } else if (ownSetter) {
+                ownSetter.call(element, value);
+              } else {
+                element.value = value;
+              }
+            } catch (e) {
+              element.value = value;
+            }
             const tracker = element._valueTracker;
             if (tracker) {
-              tracker.setValue(lastValue);
+              tracker.setValue('');
             }
-            element.dispatchEvent(event);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
           }
 
           function triggerEvents(element) {
@@ -149,6 +161,8 @@ const Conrad = () => {
           ref={webviewRef}
           src="https://tm1.carparts-cat.com/login/car" 
           style={{ width: '100%', height: '100%', display: 'inline-flex' }}
+          // @ts-ignore
+          partition="persist:carparts"
           allowpopups="true"
         />
       </div>

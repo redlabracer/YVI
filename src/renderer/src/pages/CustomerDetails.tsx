@@ -1086,10 +1086,26 @@ export default function CustomerDetails() {
                           <span>FIN: {vehicle.vin || '-'}</span>
                           {vehicle.vin && isElectron && (
                             <button 
-                              onClick={() => {
+                              onClick={async () => {
                                 try {
+                                  // Credentials live in Settings, which may be served by the
+                                  // remote server. The main-process FIN handler can't read the
+                                  // remote DB, so fetch them here and pass them along.
+                                  let username = ''
+                                  let password = ''
+                                  try {
+                                    const settings: any = await api.settings.get()
+                                    username = settings?.carPartsUser || ''
+                                    password = settings?.carPartsPass || ''
+                                  } catch (e) {
+                                    console.error('Failed to load CarParts credentials:', e)
+                                  }
                                   // @ts-ignore
-                                  window.electron.ipcRenderer.send('open-carparts-cat', vehicle.vin)
+                                  window.electron.ipcRenderer.send('open-carparts-cat', {
+                                    query: vehicle.vin,
+                                    username,
+                                    password
+                                  })
                                 } catch (err) {
                                   console.error('Failed to open Carparts:', err)
                                   alert('Carparts-Katalog konnte nicht geöffnet werden')

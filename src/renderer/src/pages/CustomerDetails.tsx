@@ -7,7 +7,7 @@ import {
   File, ExternalLink, Package, Wand2, Loader2, Smartphone, 
   Users, ArrowRightLeft, Search
 } from 'lucide-react'
-import { api } from '../api'
+import { api, getAssetUrl } from '../api'
 
 export default function CustomerDetails() {
   const { id } = useParams()
@@ -1421,7 +1421,7 @@ export default function CustomerDetails() {
                 >
                   <div className="aspect-square bg-gray-50 dark:bg-gray-700 rounded-lg mb-3 flex items-center justify-center overflow-hidden relative border border-gray-100 dark:border-gray-600">
                     {doc.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                      <img src={`file://${doc.path}`} alt={doc.name} className="object-cover w-full h-full" />
+                      <img src={getAssetUrl(doc.path)} alt={doc.name} className="object-cover w-full h-full" />
                     ) : (
                       <File className="text-gray-300 dark:text-gray-500 w-12 h-12" />
                     )}

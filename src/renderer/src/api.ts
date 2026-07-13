@@ -78,6 +78,28 @@ export const setServerUrl = (url: string) => {
   localStorage.setItem('serverUrl', url);
 };
 
+// Resolve a document/asset path to a displayable URL depending on the runtime.
+// - Electron: local files are served via the file:// protocol.
+// - Web/Remote: server-relative /uploads paths are loaded from the server.
+export const getAssetUrl = (path?: string | null): string => {
+  if (!path) return '';
+  if (/^(https?:|data:|blob:)/i.test(path)) return path;
+
+  if (isElectron) {
+    // Local absolute path on the desktop machine
+    return path.startsWith('file://') ? path : `file://${path}`;
+  }
+
+  // Web/Remote: only server-hosted uploads can be displayed
+  if (path.startsWith('/uploads')) {
+    const rawServerUrl = localStorage.getItem('serverUrl');
+    const serverUrl = rawServerUrl ? rawServerUrl.replace(/\/$/, '') : '';
+    return serverUrl ? `${serverUrl}${path}` : path;
+  }
+
+  return '';
+};
+
 export const api = {
   // --- KUNDEN (Customers) ---
   customers: {

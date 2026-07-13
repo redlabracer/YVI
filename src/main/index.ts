@@ -2034,14 +2034,18 @@ function createWindow(): void {
 
       // Print / PDF / document popups must open as real child windows so they
       // can render and trigger the print dialog (e.g. Lexware "Drucke & Speichern").
+      // Note: match "pdf" anywhere so Lexware's voucher print endpoint
+      // (…/salesdocgen-rest/document/v100/salesVoucherPdf/<id>) is detected too —
+      // it has no ".pdf"/"/pdf" separator, so the old check missed it and the URL
+      // was loaded inside the same webview, leaving an endless loading screen.
       const isDocumentPopup =
         lower.startsWith('blob:') ||
         lower.startsWith('data:') ||
-        lower.includes('.pdf') ||
-        lower.includes('/pdf') ||
+        lower.includes('pdf') ||
         lower.includes('print') ||
         lower.includes('download') ||
-        lower.includes('render')
+        lower.includes('render') ||
+        lower.includes('salesdocgen')
 
       if (isDocumentPopup) {
         return {

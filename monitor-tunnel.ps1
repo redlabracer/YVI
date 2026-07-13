@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Überwacht den Cloudflare Tunnel Status und startet den Dienst bei Fehlern neu.
     Muss als Administrator ausgeführt werden.
@@ -118,7 +118,7 @@ while ($true) {
 
     # Neustart durchführen falls nötig
     if ($restartNeeded) {
-        Write-Host "[$timestamp] ACTION: Starte '$ServiceName' neu..." -ForegroundColor Login
+        Write-Host "[$timestamp] ACTION: Starte '$ServiceName' neu..." -ForegroundColor Cyan
         try {
             Restart-Service -Name $ServiceName -Force -ErrorAction Stop
             Write-Host "   -> Neustart erfolgreich." -ForegroundColor Green

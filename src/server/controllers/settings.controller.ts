@@ -2,6 +2,12 @@ import { Request, Response } from 'express'
 import prisma from '../db'
 import { join } from 'path'
 import { promises as fs } from 'fs'
+import {
+  LexwareUserError,
+  buildLexwareContact,
+  createLexwareInvoiceDraft,
+  lexwareFetch
+} from '../../shared/lexware'
 
 const normalizeGoogleModel = (model?: unknown) => {
   if (typeof model !== 'string') return model
@@ -65,37 +71,15 @@ export const saveSettings = async (req: Request, res: Response) => {
   }
 }
 
-// Lexoffice erlaubt nur ~2 Anfragen pro Sekunde. Dieser Helper wiederholt
-// Anfragen bei 429 (Too Many Requests) automatisch mit exponentiellem Backoff
-// und respektiert den "Retry-After"-Header, falls vorhanden.
-const lexwareFetch = async (
-  url: string,
-  options: RequestInit,
-  maxRetries = 5
-): Promise<Response> => {
-  let attempt = 0
-
-  while (true) {
-    const response = await fetch(url, options)
-
-    if (response.status !== 429 || attempt >= maxRetries) {
-      return response
-    }
-
-    // Retry-After kann in Sekunden angegeben sein
-    const retryAfterHeader = response.headers.get('Retry-After')
-    const retryAfterMs = retryAfterHeader
-      ? Number(retryAfterHeader) * 1000
-      : 0
-
-    // Exponentielles Backoff: 1s, 2s, 4s, 8s, 16s (Minimum aus Retry-After)
-    const backoffMs = Math.max(retryAfterMs, 1000 * Math.pow(2, attempt))
-    attempt++
-
-    console.warn(
-      `Lexware Rate-Limit (429) erreicht. Warte ${backoffMs}ms vor erneutem Versuch (${attempt}/${maxRetries})...`
-    )
-    await new Promise((resolve) => setTimeout(resolve, backoffMs))
+export const createInvoiceDraft = async (req: Request, res: Response) => {
+  try {
+    res.json(await createLexwareInvoiceDraft(prisma, req.body))
+  } catch (error: any) {
+    console.error('Lexware invoice draft error:', error)
+    const isUserError = error instanceof LexwareUserError
+    res.status(isUserError ? 400 : 500).json({
+      error: isUserError ? error.message : 'Der Rechnungsentwurf konnte nicht angelegt werden.'
+    })
   }
 }
 
@@ -209,58 +193,8 @@ export const syncLexware = async (req: Request, res: Response) => {
       try {
         await new Promise(resolve => setTimeout(resolve, 300))
         
-        let street = ''
-        let zip = ''
-        let city = ''
-        
-        if (customer.address) {
-          const addressParts = customer.address.split(',')
-          if (addressParts.length >= 2) {
-            street = addressParts[0].trim()
-            const zipCity = addressParts[1].trim().split(' ')
-            if (zipCity.length >= 2) {
-              zip = zipCity[0]
-              city = zipCity.slice(1).join(' ')
-            }
-          } else {
-            street = customer.address
-          }
-        }
-        
-        const contactData: any = {
-          version: 0,
-          roles: {
-            customer: {}
-          },
-          person: {
-            firstName: customer.firstName || '',
-            lastName: customer.lastName
-          }
-        }
-        
-        if (street || city || zip) {
-          contactData.addresses = {
-            billing: [{
-              street: street,
-              zip: zip,
-              city: city,
-              countryCode: 'DE'
-            }]
-          }
-        }
-        
-        if (customer.email) {
-          contactData.emailAddresses = {
-            business: [customer.email]
-          }
-        }
-        
-        if (customer.phone) {
-          contactData.phoneNumbers = {
-            mobile: [customer.phone]
-          }
-        }
-        
+        const contactData = buildLexwareContact(customer)
+
         const createResponse = await lexwareFetch('https://api.lexoffice.io/v1/contacts', {
           method: 'POST',
           headers: {
@@ -395,9 +329,11 @@ export const syncLexware = async (req: Request, res: Response) => {
         })
 
         if (existingRecord) {
+            // Aus YVI angelegte Rechnungen behalten Arbeitsbeschreibung und Leistungsdatum
+            const isImportedEntry = existingRecord.description === recordData.description
             await prisma.serviceRecord.update({
                 where: { id: existingRecord.id },
-                data: recordData
+                data: isImportedEntry ? recordData : { cost: recordData.cost, customerId: recordData.customerId }
             })
         } else {
             await prisma.serviceRecord.create({

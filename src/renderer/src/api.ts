@@ -68,7 +68,8 @@ const request = async (endpoint: string, method = 'GET', body?: any) => {
   });
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.statusText}`);
+    const body = await response.json().catch(() => null);
+    throw new Error(`API Error: ${body?.error || response.statusText}`);
   }
 
   return response.json();
@@ -351,6 +352,21 @@ export const api = {
             return await window.electron.ipcRenderer.invoke('sync-lexware');
         } else {
             return await request('settings/sync-lexware', 'POST');
+        }
+    },
+    createLexwareInvoiceDraft: async (data: {
+        customerId: number;
+        vehicleId?: number | string | null;
+        serviceRecordId?: number | null;
+        mileage?: number | string | null;
+        date: string;
+        workDescription?: string;
+    }): Promise<{ id: string; editUrl: string; serviceRecordId: number }> => {
+        if (isElectron) {
+            // @ts-ignore
+            return await window.electron.ipcRenderer.invoke('create-lexware-invoice-draft', data);
+        } else {
+            return await request('settings/lexware-invoice-draft', 'POST', data);
         }
     }
   },

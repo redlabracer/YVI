@@ -5,9 +5,11 @@ import {
   ArrowLeft, Edit2, Trash2, Save, X, Phone, Mail, MapPin, 
   Car, FileText, History, Plus, Upload, Calendar, DollarSign,
   File, ExternalLink, Package, Wand2, Loader2, Smartphone, 
-  Users, ArrowRightLeft, Search
+  Users, ArrowRightLeft, Search, Receipt
 } from 'lucide-react'
 import { api, getAssetUrl } from '../api'
+import LexwareInvoiceDialog from '../components/LexwareInvoiceDialog'
+import { getLexwareInvoiceEditUrl } from '../../../shared/lexware'
 
 export default function CustomerDetails() {
   const { id } = useParams()
@@ -51,6 +53,7 @@ export default function CustomerDetails() {
   const [selectedHistoryEntry, setSelectedHistoryEntry] = useState<any>(null)
   const [isEditingHistory, setIsEditingHistory] = useState(false)
   const [historyEditData, setHistoryEditData] = useState({ description: '', date: '', mileage: '', filePaths: [] as string[] })
+  const [invoiceDialog, setInvoiceDialog] = useState<{ vehicle?: any; record?: any } | null>(null)
   const [editingVehicleId, setEditingVehicleId] = useState<number | null>(null)
   const [tempVehicleData, setTempVehicleData] = useState({ 
     make: '',
@@ -515,6 +518,15 @@ export default function CustomerDetails() {
     await api.documents.open(document)
   }
 
+  const openLexwareInvoice = (invoiceId: string) => {
+    // @ts-ignore - Die eingebettete Lexware-Ansicht gibt es nur in der Desktop-App
+    if (window.electron) {
+      navigate(`/lexware?invoice=${invoiceId}`)
+    } else {
+      window.open(getLexwareInvoiceEditUrl(invoiceId), '_blank')
+    }
+  }
+
   const handleAddHistory = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!customer) return
@@ -944,8 +956,14 @@ export default function CustomerDetails() {
 
             {customer.vehicles.map((vehicle: any) => (
               <div key={vehicle.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow">
-                <div className="flex justify-end mb-2">
-                  <button 
+                <div className="flex justify-end gap-2 mb-2">
+                  <button
+                    onClick={() => setInvoiceDialog({ vehicle })}
+                    className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-2 font-medium"
+                  >
+                    <Receipt size={14} /> Rechnung erstellen
+                  </button>
+                  <button
                     onClick={() => {
                       setActiveTab('history')
                       setNewHistoryEntry(prev => ({ ...prev, vehicleId: vehicle.id }))
@@ -1386,7 +1404,7 @@ export default function CustomerDetails() {
                     <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-2 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">{entry.description}</p>
                     {(entry.documents?.length > 0 || entry.lexwareId) && (
                       <div className="mt-3 flex gap-2">
-                        {entry.lexwareId && <span className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded border border-blue-100 dark:border-blue-800">Rechnung vorhanden</span>}
+                        {entry.lexwareId && <span className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-1 rounded border border-blue-100 dark:border-blue-800">{entry.cost === null ? 'Rechnungsentwurf' : 'Rechnung vorhanden'}</span>}
                         {entry.documents?.length > 0 && <span className="text-xs bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1 rounded border border-gray-200 dark:border-gray-600">{entry.documents.length} Anhänge</span>}
                       </div>
                     )}
@@ -1626,16 +1644,47 @@ export default function CustomerDetails() {
                   </button>
                 </>
               ) : (
-                <button 
-                  onClick={() => setSelectedHistoryEntry(null)}
-                  className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
-                >
-                  Schließen
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      const entry = selectedHistoryEntry
+                      setSelectedHistoryEntry(null)
+                      if (entry.lexwareId) {
+                        openLexwareInvoice(entry.lexwareId)
+                      } else {
+                        setInvoiceDialog({ record: entry })
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    <Receipt size={16} />
+                    {selectedHistoryEntry.lexwareId ? 'In Lexware öffnen' : 'Rechnung erstellen'}
+                  </button>
+                  <button
+                    onClick={() => setSelectedHistoryEntry(null)}
+                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                  >
+                    Schließen
+                  </button>
+                </>
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {invoiceDialog && (
+        <LexwareInvoiceDialog
+          customer={customer}
+          vehicle={invoiceDialog.vehicle}
+          record={invoiceDialog.record}
+          onClose={() => setInvoiceDialog(null)}
+          onCreated={(invoiceId) => {
+            setInvoiceDialog(null)
+            if (id) loadCustomer(id)
+            openLexwareInvoice(invoiceId)
+          }}
+        />
       )}
 
       {/* Merge Customer Modal */}

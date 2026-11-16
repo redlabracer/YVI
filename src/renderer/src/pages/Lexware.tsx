@@ -1,8 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, RotateCw } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { getLexwareInvoiceEditUrl } from '../../../shared/lexware'
 
 const Lexware = () => {
   const webviewRef = useRef<any>(null)
+  const [searchParams] = useSearchParams()
+  // Aus YVI angelegte Entwürfe öffnen sich direkt im Lexware-Editor
+  const invoiceId = searchParams.get('invoice')
+  const startUrl =
+    invoiceId && /^[0-9a-f-]{36}$/i.test(invoiceId)
+      ? getLexwareInvoiceEditUrl(invoiceId)
+      : 'https://app.lexware.de/dash'
   const [credentials, setCredentials] = useState<{user: string, pass: string} | null>(null)
   const [loading, setLoading] = useState(true)
   const [canGoBack, setCanGoBack] = useState(false)
@@ -240,7 +249,7 @@ const Lexware = () => {
       <div className="flex-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg overflow-hidden shadow-sm" style={{ minHeight: '500px' }}>
         <webview 
           ref={webviewRef}
-          src="https://app.lexware.de/dash" 
+          src={startUrl}
           style={{ width: '100%', height: '100%', minHeight: '500px' }}
           // @ts-ignore
           partition="persist:lexware"

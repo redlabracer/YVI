@@ -9,6 +9,7 @@ import { startMobileServer, stopMobileServer } from './mobile-server'
 import { logger, setupLoggerIPC } from './logger'
 import { runMigrations } from './db'
 import { PrismaClient } from '@prisma/client'
+import { buildLexwareContact, createLexwareInvoiceDraft, lexwareFetch } from '../shared/lexware'
 
 // ===== AUTO-UPDATER KONFIGURATION =====
 autoUpdater.logger = logger
@@ -1556,34 +1557,9 @@ ipcMain.handle('save-settings', async (_, data) => {
 })
 
 
-// Lexoffice erlaubt nur ~2 Anfragen pro Sekunde. Dieser Helper wiederholt
-// Anfragen bei 429 (Too Many Requests) automatisch mit exponentiellem Backoff
-// und respektiert den "Retry-After"-Header, falls vorhanden.
-const lexwareFetch = async (
-  url: string,
-  options: Parameters<typeof fetch>[1],
-  maxRetries = 5
-): Promise<Response> => {
-  let attempt = 0
-
-  while (true) {
-    const response = await fetch(url, options)
-
-    if (response.status !== 429 || attempt >= maxRetries) {
-      return response
-    }
-
-    const retryAfterHeader = response.headers.get('Retry-After')
-    const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : 0
-    const backoffMs = Math.max(retryAfterMs, 1000 * Math.pow(2, attempt))
-    attempt++
-
-    console.warn(
-      `Lexware Rate-Limit (429) erreicht. Warte ${backoffMs}ms vor erneutem Versuch (${attempt}/${maxRetries})...`
-    )
-    await new Promise((resolve) => setTimeout(resolve, backoffMs))
-  }
-}
+ipcMain.handle('create-lexware-invoice-draft', async (_, data) => {
+  return await createLexwareInvoiceDraft(prisma, data)
+})
 
 ipcMain.handle('sync-lexware', async () => {
   console.log('IPC: sync-lexware called')
@@ -1784,9 +1760,11 @@ ipcMain.handle('sync-lexware', async () => {
             })
 
             if (existingRecord) {
+                // Aus YVI angelegte Rechnungen behalten Arbeitsbeschreibung und Leistungsdatum
+                const isImportedEntry = existingRecord.description === recordData.description
                 await prisma.serviceRecord.update({
                     where: { id: existingRecord.id },
-                    data: recordData
+                    data: isImportedEntry ? recordData : { cost: recordData.cost, customerId: recordData.customerId }
                 })
             } else {
                 await prisma.serviceRecord.create({
@@ -1879,64 +1857,8 @@ ipcMain.handle('sync-lexware', async () => {
         // Rate limiting
         await new Promise(resolve => setTimeout(resolve, 300))
         
-        // Parse address if available
-        let street = ''
-        let zip = ''
-        let city = ''
-        
-        if (customer.address) {
-          // Try to parse address like "Straße 123, 12345 Stadt"
-          const addressParts = customer.address.split(',')
-          if (addressParts.length >= 2) {
-            street = addressParts[0].trim()
-            const zipCity = addressParts[1].trim().split(' ')
-            if (zipCity.length >= 2) {
-              zip = zipCity[0]
-              city = zipCity.slice(1).join(' ')
-            }
-          } else {
-            street = customer.address
-          }
-        }
-        
-        // Build Lexware contact object
-        const contactData: any = {
-          version: 0,
-          roles: {
-            customer: {}
-          },
-          person: {
-            firstName: customer.firstName || '',
-            lastName: customer.lastName
-          }
-        }
-        
-        // Add address if available
-        if (street || city || zip) {
-          contactData.addresses = {
-            billing: [{
-              street: street,
-              zip: zip,
-              city: city,
-              countryCode: 'DE'
-            }]
-          }
-        }
-        
-        // Add email if available
-        if (customer.email) {
-          contactData.emailAddresses = {
-            business: [customer.email]
-          }
-        }
-        
-        // Add phone if available
-        if (customer.phone) {
-          contactData.phoneNumbers = {
-            mobile: [customer.phone]
-          }
-        }
-        
+        const contactData = buildLexwareContact(customer)
+
         // Create contact in Lexware
         const createResponse = await lexwareFetch('https://api.lexoffice.io/v1/contacts', {
           method: 'POST',
